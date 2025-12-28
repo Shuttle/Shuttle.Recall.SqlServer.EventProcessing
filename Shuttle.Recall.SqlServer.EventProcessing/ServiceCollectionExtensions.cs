@@ -9,7 +9,7 @@ public static class ServiceCollectionExtensions
 {
     extension(IServiceCollection services)
     {
-        public IServiceCollection AddSqlEventProcessing(Action<SqlServerEventProcessingBuilder>? builder = null)
+        public IServiceCollection AddSqlServerEventProcessing(Action<SqlServerEventProcessingBuilder>? builder = null)
         {
             var sqlServerEventProcessingBuilder = new SqlServerEventProcessingBuilder(Guard.AgainstNull(services));
 
