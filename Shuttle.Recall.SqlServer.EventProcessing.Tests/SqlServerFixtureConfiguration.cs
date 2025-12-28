@@ -12,7 +12,6 @@ public class SqlServerFixtureConfiguration
     public static IServiceCollection GetServiceCollection(IServiceCollection? serviceCollection = null)
     {
         var configuration = new ConfigurationBuilder()
-            .AddJsonFile("appsettings.json")
             .AddUserSecrets<SqlServerFixtureConfiguration>()
             .Build();
 
@@ -20,8 +19,6 @@ public class SqlServerFixtureConfiguration
             .AddSingleton<IConfiguration>(configuration)
             .AddSqlServerEventStorage(builder =>
             {
-                configuration.GetSection(SqlServerStorageOptions.SectionName).Bind(builder.Options);
-
                 builder.Options.ConnectionString = configuration.GetConnectionString("StorageConnection") ?? throw new ApplicationException("A 'ConnectionString' with name 'StorageConnection' is required which points to a Sql Server database that will contain the event storage.");
                 builder.Options.Schema = "RecallFixture";
             })

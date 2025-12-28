@@ -20,11 +20,7 @@ public class EventProcessingFixture : RecallFixture
 
         var fixtureConfiguration = new FixtureConfiguration(services)
             .WithStarting(StartingAsync)
-            .WithAddEventStore(builder =>
-            {
-                builder.Options.ProjectionThreadCount = 1;
-            })
-            .WithHandlerTimeout(TimeSpan.FromMinutes(5));
+            .WithEventProcessingHandlerTimeout(TimeSpan.FromMinutes(5));
 
         await ExerciseEventProcessingAsync(fixtureConfiguration, isTransactional);
     }
@@ -38,11 +34,7 @@ public class EventProcessingFixture : RecallFixture
 
         var fixtureConfiguration = new FixtureConfiguration(services)
             .WithStarting(StartingAsync)
-            .WithAddEventStore(builder =>
-            {
-                builder.Options.ProjectionThreadCount = 1;
-            })
-            .WithHandlerTimeout(TimeSpan.FromMinutes(5));
+            .WithEventProcessingHandlerTimeout(TimeSpan.FromMinutes(5));
 
         await ExerciseEventProcessingWithDelayAsync(fixtureConfiguration, isTransactional);
     }
@@ -55,11 +47,7 @@ public class EventProcessingFixture : RecallFixture
         var services = SqlServerFixtureConfiguration.GetServiceCollection();
 
         var fixtureConfiguration = new FixtureConfiguration(services)
-            .WithStarting(StartingAsync)
-            .WithAddEventStore(builder =>
-            {
-                builder.Options.ProjectionThreadCount = 1;
-            });
+            .WithStarting(StartingAsync);
 
         await ExerciseEventProcessingWithFailureAsync(fixtureConfiguration, isTransactional);
     }
@@ -75,9 +63,9 @@ public class EventProcessingFixture : RecallFixture
             .WithStarting(StartingAsync)
             .WithAddEventStore(builder =>
             {
-                builder.Options.ProjectionThreadCount = 25;
+                builder.Options.ProjectionThreadCount = 5;
             })
-            .WithHandlerTimeout(TimeSpan.FromMinutes(5));
+            .WithEventProcessingHandlerTimeout(TimeSpan.FromMinutes(60));
 
         await ExerciseEventProcessingVolumeAsync(fixtureConfiguration, isTransactional);
     }
@@ -100,7 +88,7 @@ BEGIN
     INNER JOIN 
         [{sqlServerStorageOptions.Schema}].[EventType] et ON pe.EventTypeId = et.Id
     WHERE
-        et.[TypeName] LIKE 'Shuttle.Recall.Tests%'
+        et.[TypeName] LIKE 'Shuttle.Recall.Testing%'
 END
 ");
         }

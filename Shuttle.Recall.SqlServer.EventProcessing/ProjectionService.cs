@@ -1,5 +1,4 @@
 ﻿using System.Transactions;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using Shuttle.Core.Contract;
 using Shuttle.Core.Pipelines;
@@ -8,66 +7,101 @@ using Shuttle.Recall.SqlServer.Storage;
 
 namespace Shuttle.Recall.SqlServer.EventProcessing;
 
-public class ProjectionService(IOptions<SqlServerStorageOptions> sqlServerStorageOptions, IOptions<SqlServerEventProcessingOptions> sqlServerEventProcessingOptions, IDbContextFactory<SqlServerEventProcessingDbContext> dbContextFactory, IProjectionRepository projectionRepository, IProjectionQuery projectionQuery, IPrimitiveEventRepository primitiveEventRepository, IPrimitiveEventQuery primitiveEventQuery, IEventProcessorConfiguration eventProcessorConfiguration)
-    : IProjectionService
+public class ProjectionService(IOptions<EventStoreOptions> eventStoreOptions, IOptions<SqlServerEventProcessingOptions> sqlServerEventProcessingOptions, IProjectionRepository projectionRepository, IProjectionQuery projectionQuery, IPrimitiveEventQuery primitiveEventQuery, IEventProcessorConfiguration eventProcessorConfiguration)
+    : IProjectionService, IPipelineObserver<ThreadPoolsStarted>
 {
-    private readonly IDbContextFactory<SqlServerEventProcessingDbContext> _dbContextFactory = Guard.AgainstNull(dbContextFactory);
+    private class BalancedProjection(Projection projection, IEnumerable<TimeSpan> backoffDurations)
+    {
+        private readonly TimeSpan[] _durations = Guard.AgainstEmpty(backoffDurations).ToArray();
+        private int _durationIndex;
+
+        public Projection Projection { get; } = projection;
+        public DateTimeOffset BackoffTillDate { get; private set; } = DateTimeOffset.MinValue;
+
+        public void Backoff()
+        {
+            if (_durationIndex >= _durations.Length)
+            {
+                _durationIndex = _durations.Length - 1;
+            }
+
+            BackoffTillDate = DateTimeOffset.UtcNow.Add(_durations[_durationIndex++]);
+        }
+
+        public void Resume()
+        {
+            BackoffTillDate = DateTimeOffset.MinValue;
+            _durationIndex = 0;
+        }
+    }
+
+    private readonly EventStoreOptions _eventStoreOptions = Guard.AgainstNull(Guard.AgainstNull(eventStoreOptions).Value);
     private readonly SqlServerEventProcessingOptions _sqlServerEventProcessingOptions = Guard.AgainstNull(Guard.AgainstNull(sqlServerEventProcessingOptions).Value);
     private readonly IEventProcessorConfiguration _eventProcessorConfiguration = Guard.AgainstNull(eventProcessorConfiguration);
     private readonly SemaphoreSlim _lock = new(1, 1);
     private readonly IPrimitiveEventQuery _primitiveEventQuery = Guard.AgainstNull(primitiveEventQuery);
-    private readonly IPrimitiveEventRepository _primitiveEventRepository = Guard.AgainstNull(primitiveEventRepository);
     private readonly IProjectionQuery _projectionQuery = Guard.AgainstNull(projectionQuery);
     private readonly IProjectionRepository _projectionRepository = Guard.AgainstNull(projectionRepository);
     private readonly Dictionary<string, List<ThreadPrimitiveEvent>> _projectionThreadPrimitiveEvents = new();
-    private readonly SqlServerStorageOptions _sqlServerStorageOptions = Guard.AgainstNull(Guard.AgainstNull(sqlServerStorageOptions).Value);
     private int[] _managedThreadIds = [];
 
-    private Projection[] _projections = [];
+    private BalancedProjection[] _balancedProjections = [];
     private int _roundRobinIndex;
 
     public async Task<ProjectionEvent?> RetrieveEventAsync(IPipelineContext<RetrieveEvent> pipelineContext, CancellationToken cancellationToken = default)
     {
         var processorThreadManagedThreadId = Guard.AgainstNull(pipelineContext).Pipeline.State.GetProcessorThreadManagedThreadId();
 
-        Projection? projection;
-
-        if (_projections.Length == 0)
+        if (_balancedProjections.Length == 0)
         {
             return null;
         }
 
-        await _lock.WaitAsync(cancellationToken);
-
-        try
+        for (var i = 0; i < _balancedProjections.Length; i++)
         {
-            if (_roundRobinIndex >= _projections.Length)
+            BalancedProjection balancedProjection;
+
+            await _lock.WaitAsync(cancellationToken);
+            try
             {
-                _roundRobinIndex = 0;
+                var currentIndex = (_roundRobinIndex + i) % _balancedProjections.Length;
+                balancedProjection = _balancedProjections[currentIndex];
+                _roundRobinIndex = (currentIndex + 1) % _balancedProjections.Length;
+            }
+            finally
+            {
+                _lock.Release();
             }
 
-            projection = _projections[_roundRobinIndex++];
+            if (balancedProjection.BackoffTillDate > DateTimeOffset.UtcNow)
+            {
+                continue;
+            }
+
+            var projectionThreadPrimitiveEvents = _projectionThreadPrimitiveEvents[balancedProjection.Projection.Name];
+
+            if (!projectionThreadPrimitiveEvents.Any())
+            {
+                await GetProjectionJournalAsync(balancedProjection.Projection);
+            }
+
+            if (!projectionThreadPrimitiveEvents.Any())
+            {
+                balancedProjection.Backoff();
+                continue;
+            }
+
+            balancedProjection.Resume();
+
+            var threadPrimitiveEvent = projectionThreadPrimitiveEvents.FirstOrDefault(item => item.ManagedThreadId == processorThreadManagedThreadId);
+
+            if (threadPrimitiveEvent != null)
+            {
+                return new(balancedProjection.Projection, threadPrimitiveEvent.PrimitiveEvent);
+            }
         }
-        finally
-        {
-            _lock.Release();
-        }
 
-        var projectionThreadPrimitiveEvents = _projectionThreadPrimitiveEvents[projection.Name];
-
-        if (!projectionThreadPrimitiveEvents.Any())
-        {
-            await GetProjectionJournalAsync(projection);
-        }
-
-        if (!projectionThreadPrimitiveEvents.Any())
-        {
-            return null;
-        }
-
-        var threadPrimitiveEvent = projectionThreadPrimitiveEvents.FirstOrDefault(item => item.ManagedThreadId == processorThreadManagedThreadId);
-
-        return threadPrimitiveEvent == null ? null : new ProjectionEvent(projection, threadPrimitiveEvent.PrimitiveEvent);
+        return null;
     }
 
     public async Task AcknowledgeEventAsync(IPipelineContext<AcknowledgeEvent> pipelineContext, CancellationToken cancellationToken = default)
@@ -106,8 +140,6 @@ public class ProjectionService(IOptions<SqlServerStorageOptions> sqlServerStorag
 
             var journalSequenceNumbers = new List<long>();
 
-            long sequenceNumberEnd;
-
             using (new TransactionScope(TransactionScopeOption.Suppress, TransactionScopeAsyncFlowOption.Enabled))
             {
                 var specification = new PrimitiveEvent.Specification()
@@ -125,37 +157,39 @@ public class ProjectionService(IOptions<SqlServerStorageOptions> sqlServerStorag
                 }
             }
 
-            var journalSequenceNumberEnd = journalSequenceNumbers.Any() ? journalSequenceNumbers.Max() : 0;
-
             await _projectionRepository.RegisterJournalSequenceNumbersAsync(projection.Name, journalSequenceNumbers).ConfigureAwait(false);
-            await _projectionRepository.SetSequenceNumberAsync(projection.Name, journalSequenceNumberEnd);
+
+            if (journalSequenceNumbers.Any())
+            {
+                await _projectionRepository.SetSequenceNumberAsync(projection.Name, journalSequenceNumbers.Max());
+            }
         }
         finally
         {
             _lock.Release();
         }
     }
-
-    public async Task StartupAsync(IProcessorThreadPool processorThreadPool)
+    
+    public async Task ExecuteAsync(IPipelineContext<ThreadPoolsStarted> pipelineContext, CancellationToken cancellationToken = default)
     {
-        Guard.AgainstNull(processorThreadPool);
+        var processorThreadPool = Guard.AgainstNull(Guard.AgainstNull(pipelineContext).Pipeline.State.Get<IProcessorThreadPool>("EventProcessorThreadPool"));
 
         _managedThreadIds = processorThreadPool.ProcessorThreads.Select(item => item.ManagedThreadId).ToArray();
 
         Dictionary<string, List<long>> incompleteSequenceNumbers = new();
 
-        List<Projection> projections = [];
+        List<BalancedProjection> balancedProjections = [];
 
         foreach (var projectionConfiguration in _eventProcessorConfiguration.Projections)
         {
-            projections.Add(await _projectionRepository.GetAsync(projectionConfiguration.Name));
+            balancedProjections.Add(new(await _projectionRepository.GetAsync(projectionConfiguration.Name, cancellationToken), _eventStoreOptions.ProjectionProcessorIdleDurations));
 
             _projectionThreadPrimitiveEvents.Add(projectionConfiguration.Name, []);
 
-            incompleteSequenceNumbers.Add(projectionConfiguration.Name, [..await _projectionQuery.GetIncompleteSequenceNumbersAsync(projectionConfiguration.Name)]);
+            incompleteSequenceNumbers.Add(projectionConfiguration.Name, [.. await _projectionQuery.GetIncompleteSequenceNumbersAsync(projectionConfiguration.Name, cancellationToken)]);
         }
 
-        _projections = projections.ToArray();
+        _balancedProjections = balancedProjections.ToArray();
 
         foreach (var pair in incompleteSequenceNumbers)
         {
@@ -168,7 +202,7 @@ public class ProjectionService(IOptions<SqlServerStorageOptions> sqlServerStorag
 
             specification.WithSequenceNumbers(pair.Value);
 
-            foreach (var primitiveEvent in (await _primitiveEventQuery.SearchAsync(specification)).OrderBy(item => item.SequenceNumber))
+            foreach (var primitiveEvent in (await _primitiveEventQuery.SearchAsync(specification, cancellationToken)).OrderBy(item => item.SequenceNumber))
             {
                 var managedThreadId = _managedThreadIds[GetManagedThreadIdIndex(primitiveEvent)];
 

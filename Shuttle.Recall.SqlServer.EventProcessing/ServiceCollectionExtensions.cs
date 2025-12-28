@@ -15,11 +15,12 @@ public static class ServiceCollectionExtensions
 
             builder?.Invoke(sqlServerEventProcessingBuilder);
 
-            services.AddSingleton<IValidateOptions<SqlServerEventProcessingOptions>, SqlServerEventProcessingOptionsValidator>();
-            services.AddSingleton<IProjectionQuery, ProjectionQuery>();
-            services.AddSingleton<IProjectionRepository, ProjectionRepository>();
-            services.AddSingleton<IProjectionService, ProjectionService>();
-            services.AddSingleton<EventProcessingStartupObserver>();
+            services
+                .AddSingleton<IValidateOptions<SqlServerEventProcessingOptions>, SqlServerEventProcessingOptionsValidator>()
+                .AddSingleton<IProjectionQuery, ProjectionQuery>()
+                .AddSingleton<IProjectionRepository, ProjectionRepository>()
+                .AddSingleton<ProjectionService>()
+                .AddSingleton<IProjectionService>(sp => sp.GetRequiredService<ProjectionService>());
 
             services.AddOptions<SqlServerEventProcessingOptions>().Configure(options =>
             {

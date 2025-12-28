@@ -99,7 +99,7 @@ EXEC sp_releaseapplock @Resource = '{typeof(EventProcessingHostedService).FullNa
     {
         if (eventArgs.Pipeline.GetType() == _eventProcessorStartupPipelineType)
         {
-            eventArgs.Pipeline.AddObserver<EventProcessingStartupObserver>();
+            eventArgs.Pipeline.AddObserver<ProjectionService>();
         }
 
         return Task.CompletedTask;
