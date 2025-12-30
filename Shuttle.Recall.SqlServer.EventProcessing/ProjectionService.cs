@@ -16,21 +16,21 @@ public class ProjectionService(IOptions<EventStoreOptions> eventStoreOptions, IO
         private int _durationIndex;
 
         public Projection Projection { get; } = projection;
-        public DateTimeOffset BackoffTillDate { get; private set; } = DateTimeOffset.MinValue;
+        public DateTimeOffset IgnoreTillDateTime { get; private set; } = DateTimeOffset.MinValue;
 
-        public void Backoff()
+        public void Idle()
         {
             if (_durationIndex >= _durations.Length)
             {
                 _durationIndex = _durations.Length - 1;
             }
 
-            BackoffTillDate = DateTimeOffset.UtcNow.Add(_durations[_durationIndex++]);
+            IgnoreTillDateTime = DateTimeOffset.UtcNow.Add(_durations[_durationIndex++]);
         }
 
         public void Resume()
         {
-            BackoffTillDate = DateTimeOffset.MinValue;
+            IgnoreTillDateTime = DateTimeOffset.MinValue;
             _durationIndex = 0;
         }
     }
@@ -73,7 +73,7 @@ public class ProjectionService(IOptions<EventStoreOptions> eventStoreOptions, IO
                 _lock.Release();
             }
 
-            if (balancedProjection.BackoffTillDate > DateTimeOffset.UtcNow)
+            if (balancedProjection.IgnoreTillDateTime > DateTimeOffset.UtcNow)
             {
                 continue;
             }
@@ -87,7 +87,7 @@ public class ProjectionService(IOptions<EventStoreOptions> eventStoreOptions, IO
 
             if (!projectionThreadPrimitiveEvents.Any())
             {
-                balancedProjection.Backoff();
+                balancedProjection.Idle();
                 continue;
             }
 
@@ -172,7 +172,7 @@ public class ProjectionService(IOptions<EventStoreOptions> eventStoreOptions, IO
     
     public async Task ExecuteAsync(IPipelineContext<ThreadPoolsStarted> pipelineContext, CancellationToken cancellationToken = default)
     {
-        var processorThreadPool = Guard.AgainstNull(Guard.AgainstNull(pipelineContext).Pipeline.State.Get<IProcessorThreadPool>("EventProcessorThreadPool"));
+        var processorThreadPool = Guard.AgainstNull(Guard.AgainstNull(pipelineContext).Pipeline.State.Get<IProcessorThreadPool>("ProjectionProcessorThreadPool"));
 
         _managedThreadIds = processorThreadPool.ProcessorThreads.Select(item => item.ManagedThreadId).ToArray();
 
