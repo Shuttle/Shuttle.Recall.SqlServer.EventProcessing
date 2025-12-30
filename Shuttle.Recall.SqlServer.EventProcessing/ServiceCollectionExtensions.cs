@@ -1,17 +1,21 @@
 ﻿using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
 using Shuttle.Core.Contract;
+using Shuttle.Recall.SqlServer.Storage;
 
 namespace Shuttle.Recall.SqlServer.EventProcessing;
 
 public static class ServiceCollectionExtensions
 {
-    extension(IServiceCollection services)
+    extension(RecallBuilder recallBuilder)
     {
-        public IServiceCollection AddSqlServerEventProcessing(Action<SqlServerEventProcessingBuilder>? builder = null)
+        public RecallBuilder UseSqlServerEventProcessing(Action<SqlServerEventProcessingBuilder>? builder = null)
         {
-            var sqlServerEventProcessingBuilder = new SqlServerEventProcessingBuilder(Guard.AgainstNull(services));
+            var services = recallBuilder.Services;
+            var sqlServerEventProcessingBuilder = new SqlServerEventProcessingBuilder(services);
 
             builder?.Invoke(sqlServerEventProcessingBuilder);
 
@@ -32,7 +36,7 @@ public static class ServiceCollectionExtensions
                 options.ProjectionBatchSize = sqlServerEventProcessingBuilder.Options.ProjectionBatchSize;
             });
 
-            services.AddHostedService<EventProcessingHostedService>();
+            recallBuilder.Services.TryAddEnumerable(ServiceDescriptor.Singleton<IHostedService, EventProcessingHostedService>());
 
             services.AddDbContextFactory<SqlServerEventProcessingDbContext>(dbContextFactoryBuilder =>
             {
@@ -42,7 +46,7 @@ public static class ServiceCollectionExtensions
                 });
             });
 
-            return services;
+            return recallBuilder;
         }
     }
 }

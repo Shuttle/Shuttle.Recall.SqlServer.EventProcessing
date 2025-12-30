@@ -61,9 +61,9 @@ public class EventProcessingFixture : RecallFixture
 
         var fixtureConfiguration = new FixtureConfiguration(services)
             .WithStarting(StartingAsync)
-            .WithAddEventStore(builder =>
+            .WithAddRecall(builder =>
             {
-                builder.Options.ProjectionThreadCount = 5;
+                builder.Options.EventProcessing.ProjectionThreadCount = 5;
             })
             .WithEventProcessingHandlerTimeout(TimeSpan.FromMinutes(60));
 

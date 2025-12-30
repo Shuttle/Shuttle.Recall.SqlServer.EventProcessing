@@ -120,6 +120,9 @@
   <data name="ConnectionStringOptionException" xml:space="preserve">
     <value>No 'SqlServerEventProcessingOptions.ConnectionString' has been specified.</value>
   </data>
+  <data name="ProjectionConfigurationException" xml:space="preserve">
+    <value>There are no projections configured.</value>
+  </data>
   <data name="ProjectionException" xml:space="preserve">
     <value>Could not get projection with name '{0}'.</value>
     <comment>0 = projection name</comment>

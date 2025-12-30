@@ -70,6 +70,15 @@ namespace Shuttle.Recall.SqlServer.EventProcessing {
         }
         
         /// <summary>
+        ///   Looks up a localized string similar to There are no projections configured..
+        /// </summary>
+        public static string ProjectionConfigurationException {
+            get {
+                return ResourceManager.GetString("ProjectionConfigurationException", resourceCulture);
+            }
+        }
+        
+        /// <summary>
         ///   Looks up a localized string similar to Could not get projection with name &apos;{0}&apos;..
         /// </summary>
         public static string ProjectionException {

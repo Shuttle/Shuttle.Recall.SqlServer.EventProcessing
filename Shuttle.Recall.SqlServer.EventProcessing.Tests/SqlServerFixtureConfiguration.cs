@@ -17,15 +17,19 @@ public class SqlServerFixtureConfiguration
 
         var services = (serviceCollection ?? new ServiceCollection())
             .AddSingleton<IConfiguration>(configuration)
-            .AddSqlServerEventStorage(builder =>
+            .AddRecall(recallBuilder =>
             {
-                builder.Options.ConnectionString = configuration.GetConnectionString("StorageConnection") ?? throw new ApplicationException("A 'ConnectionString' with name 'StorageConnection' is required which points to a Sql Server database that will contain the event storage.");
-                builder.Options.Schema = "RecallFixture";
-            })
-            .AddSqlServerEventProcessing(builder =>
-            {
-                builder.Options.ConnectionString = configuration.GetConnectionString("EventProcessingConnection") ?? throw new ApplicationException("A 'ConnectionString' with name 'EventProcessingConnection' is required which points to a Sql Server database that will contain the projections."); 
-                builder.Options.Schema = "RecallFixture";
+                recallBuilder
+                    .UseSqlServerEventStorage(builder =>
+                    {
+                        builder.Options.ConnectionString = configuration.GetConnectionString("StorageConnection") ?? throw new ApplicationException("A 'ConnectionString' with name 'StorageConnection' is required which points to a Sql Server database that will contain the event storage.");
+                        builder.Options.Schema = "RecallFixture";
+                    })
+                    .UseSqlServerEventProcessing(builder =>
+                    {
+                        builder.Options.ConnectionString = configuration.GetConnectionString("EventProcessingConnection") ?? throw new ApplicationException("A 'ConnectionString' with name 'EventProcessingConnection' is required which points to a Sql Server database that will contain the projections.");
+                        builder.Options.Schema = "RecallFixture";
+                    });
             })
             .AddPipelineLogging(); ;
 

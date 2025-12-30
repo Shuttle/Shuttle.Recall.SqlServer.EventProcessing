@@ -7,7 +7,7 @@ using Shuttle.Recall.SqlServer.Storage;
 
 namespace Shuttle.Recall.SqlServer.EventProcessing;
 
-public class ProjectionService(IOptions<EventStoreOptions> eventStoreOptions, IOptions<SqlServerEventProcessingOptions> sqlServerEventProcessingOptions, IProjectionRepository projectionRepository, IProjectionQuery projectionQuery, IPrimitiveEventQuery primitiveEventQuery, IEventProcessorConfiguration eventProcessorConfiguration)
+public class ProjectionService(IOptions<RecallOptions> recallOptions, IOptions<SqlServerEventProcessingOptions> sqlServerEventProcessingOptions, IProjectionRepository projectionRepository, IProjectionQuery projectionQuery, IPrimitiveEventQuery primitiveEventQuery, IEventProcessorConfiguration eventProcessorConfiguration)
     : IProjectionService, IPipelineObserver<ThreadPoolsStarted>
 {
     private class BalancedProjection(Projection projection, IEnumerable<TimeSpan> backoffDurations)
@@ -35,7 +35,7 @@ public class ProjectionService(IOptions<EventStoreOptions> eventStoreOptions, IO
         }
     }
 
-    private readonly EventStoreOptions _eventStoreOptions = Guard.AgainstNull(Guard.AgainstNull(eventStoreOptions).Value);
+    private readonly RecallOptions _recallOptions = Guard.AgainstNull(Guard.AgainstNull(recallOptions).Value);
     private readonly SqlServerEventProcessingOptions _sqlServerEventProcessingOptions = Guard.AgainstNull(Guard.AgainstNull(sqlServerEventProcessingOptions).Value);
     private readonly IEventProcessorConfiguration _eventProcessorConfiguration = Guard.AgainstNull(eventProcessorConfiguration);
     private readonly SemaphoreSlim _lock = new(1, 1);
@@ -182,7 +182,7 @@ public class ProjectionService(IOptions<EventStoreOptions> eventStoreOptions, IO
 
         foreach (var projectionConfiguration in _eventProcessorConfiguration.Projections)
         {
-            balancedProjections.Add(new(await _projectionRepository.GetAsync(projectionConfiguration.Name, cancellationToken), _eventStoreOptions.ProjectionProcessorIdleDurations));
+            balancedProjections.Add(new(await _projectionRepository.GetAsync(projectionConfiguration.Name, cancellationToken), _recallOptions.EventProcessing.ProjectionProcessorIdleDurations));
 
             _projectionThreadPrimitiveEvents.Add(projectionConfiguration.Name, []);
 
@@ -190,6 +190,11 @@ public class ProjectionService(IOptions<EventStoreOptions> eventStoreOptions, IO
         }
 
         _balancedProjections = balancedProjections.ToArray();
+
+        if (!_balancedProjections.Any())
+        {
+            throw new ApplicationException(Resources.ProjectionConfigurationException);
+        }
 
         foreach (var pair in incompleteSequenceNumbers)
         {
