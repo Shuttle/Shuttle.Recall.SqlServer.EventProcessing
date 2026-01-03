@@ -23,12 +23,12 @@ public class SqlServerFixtureConfiguration
                     .UseSqlServerEventStorage(builder =>
                     {
                         builder.Options.ConnectionString = configuration.GetConnectionString("StorageConnection") ?? throw new ApplicationException("A 'ConnectionString' with name 'StorageConnection' is required which points to a Sql Server database that will contain the event storage.");
-                        builder.Options.Schema = "RecallFixture";
+                        builder.Options.Schema = "recall_fixture";
                     })
                     .UseSqlServerEventProcessing(builder =>
                     {
                         builder.Options.ConnectionString = configuration.GetConnectionString("EventProcessingConnection") ?? throw new ApplicationException("A 'ConnectionString' with name 'EventProcessingConnection' is required which points to a Sql Server database that will contain the projections.");
-                        builder.Options.Schema = "RecallFixture";
+                        builder.Options.Schema = "recall_fixture";
                     });
             })
             .AddPipelineLogging(); ;
