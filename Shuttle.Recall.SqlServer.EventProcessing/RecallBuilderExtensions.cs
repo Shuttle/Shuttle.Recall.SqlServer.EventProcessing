@@ -6,7 +6,7 @@ using Microsoft.Extensions.Options;
 
 namespace Shuttle.Recall.SqlServer.EventProcessing;
 
-public static class ServiceCollectionExtensions
+public static class RecallBuilderExtensions
 {
     extension(RecallBuilder recallBuilder)
     {
@@ -34,7 +34,7 @@ public static class ServiceCollectionExtensions
                 options.ProjectionBatchSize = sqlServerEventProcessingBuilder.Options.ProjectionBatchSize;
             });
 
-            recallBuilder.Services.TryAddEnumerable(ServiceDescriptor.Singleton<IHostedService, EventProcessingHostedService>());
+            recallBuilder.Services.TryAddEnumerable(ServiceDescriptor.Transient<IHostedService, EventProcessingHostedService>());
 
             services.AddDbContextFactory<SqlServerEventProcessingDbContext>(dbContextFactoryBuilder =>
             {
