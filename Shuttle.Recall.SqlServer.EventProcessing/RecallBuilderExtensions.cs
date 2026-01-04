@@ -34,7 +34,7 @@ public static class RecallBuilderExtensions
                 options.ProjectionBatchSize = sqlServerEventProcessingBuilder.Options.ProjectionBatchSize;
             });
 
-            recallBuilder.Services.TryAddEnumerable(ServiceDescriptor.Transient<IHostedService, EventProcessingHostedService>());
+            recallBuilder.Services.TryAddEnumerable(ServiceDescriptor.Singleton<IHostedService, EventProcessingHostedService>());
 
             services.AddDbContextFactory<SqlServerEventProcessingDbContext>(dbContextFactoryBuilder =>
             {
