@@ -70,6 +70,15 @@ namespace Shuttle.Recall.SqlServer.EventProcessing {
         }
         
         /// <summary>
+        ///   Looks up a localized string similar to There are no managed threads..
+        /// </summary>
+        public static string ManagedThreadIdsException {
+            get {
+                return ResourceManager.GetString("ManagedThreadIdsException", resourceCulture);
+            }
+        }
+        
+        /// <summary>
         ///   Looks up a localized string similar to There are no projections configured..
         /// </summary>
         public static string ProjectionConfigurationException {

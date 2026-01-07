@@ -120,6 +120,9 @@
   <data name="ConnectionStringOptionException" xml:space="preserve">
     <value>No 'SqlServerEventProcessingOptions.ConnectionString' has been specified.</value>
   </data>
+  <data name="ManagedThreadIdsException" xml:space="preserve">
+    <value>There are no managed threads.</value>
+  </data>
   <data name="ProjectionConfigurationException" xml:space="preserve">
     <value>There are no projections configured.</value>
   </data>

@@ -65,7 +65,7 @@ public class EventProcessingFixture : RecallFixture
             {
                 builder.Options.EventProcessing.ProjectionThreadCount = 5;
             })
-            .WithEventProcessingHandlerTimeout(TimeSpan.FromMinutes(60));
+            .WithEventProcessingHandlerTimeout(TimeSpan.FromMinutes(2));
 
         await ExerciseEventProcessingVolumeAsync(fixtureConfiguration, isTransactional);
     }
