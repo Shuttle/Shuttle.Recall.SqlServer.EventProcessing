@@ -164,6 +164,8 @@ public class ProjectionService(IOptions<RecallOptions> recallOptions, IOptions<S
                 if (projectionExecutionContext.IsEmpty)
                 {
                     await _projectionRepository.CommitJournalSequenceNumbersAsync(projectionEvent.Projection.Name, cancellationToken);
+
+                    projectionExecutionContext.Commit();
                 }
             }
             finally
@@ -222,6 +224,7 @@ public class ProjectionService(IOptions<RecallOptions> recallOptions, IOptions<S
         public SemaphoreSlim Lock { get; } = new(1, 1);
 
         public Projection Projection { get; } = projection;
+        private long _commitSequenceNumber = 0;
 
         public void AddPrimitiveEvent(PrimitiveEvent primitiveEvent, int managedThreadId)
         {
@@ -257,9 +260,16 @@ public class ProjectionService(IOptions<RecallOptions> recallOptions, IOptions<S
                 throw new ApplicationException($"Lock required before invoking '{nameof(RemovePrimitiveEvent)}'.");
             }
 
+            var sequenceNumber = primitiveEvent.SequenceNumber!.Value;
+
             foreach (var list in _threadPrimitiveEvents.Values)
             {
-                list.RemoveAll(e => e.SequenceNumber == primitiveEvent.SequenceNumber);
+                list.RemoveAll(e => e.SequenceNumber == sequenceNumber);
+            }
+
+            if (sequenceNumber > _commitSequenceNumber)
+            {
+                _commitSequenceNumber = sequenceNumber;
             }
         }
 
@@ -284,6 +294,11 @@ public class ProjectionService(IOptions<RecallOptions> recallOptions, IOptions<S
             }
 
             return primitiveEvents.OrderBy(item => item.SequenceNumber).FirstOrDefault();
+        }
+
+        public void Commit()
+        {
+            Projection.Commit(_commitSequenceNumber);
         }
     }
 }

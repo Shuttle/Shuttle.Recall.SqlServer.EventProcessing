@@ -30,7 +30,6 @@ public static class RecallBuilderExtensions
                 options.Schema = sqlServerEventProcessingBuilder.Options.Schema;
                 options.CommandTimeout = sqlServerEventProcessingBuilder.Options.CommandTimeout;
                 options.ConfigureDatabase = sqlServerEventProcessingBuilder.Options.ConfigureDatabase;
-                options.RegisterDatabaseContextObserver = sqlServerEventProcessingBuilder.Options.RegisterDatabaseContextObserver;
                 options.ProjectionBatchSize = sqlServerEventProcessingBuilder.Options.ProjectionBatchSize;
             });
 
