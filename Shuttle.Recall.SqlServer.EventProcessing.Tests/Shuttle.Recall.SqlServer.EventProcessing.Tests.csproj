@@ -19,10 +19,4 @@
     <ProjectReference Include="..\Shuttle.Recall.SqlServer.EventProcessing\Shuttle.Recall.SqlServer.EventProcessing.csproj" />
   </ItemGroup>
 
-  <ItemGroup>
-    <Reference Include="Shuttle.Recall.SqlServer.Storage">
-      <HintPath>C:\Users\me\.nuget\packages\shuttle.recall.sqlserver.storage\21.0.0\lib\net10.0\Shuttle.Recall.SqlServer.Storage.dll</HintPath>
-    </Reference>
-  </ItemGroup>
-
 </Project>

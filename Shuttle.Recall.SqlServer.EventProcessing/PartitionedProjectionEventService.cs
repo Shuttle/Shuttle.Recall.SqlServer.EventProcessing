@@ -7,8 +7,8 @@ using Shuttle.Recall.SqlServer.Storage;
 
 namespace Shuttle.Recall.SqlServer.EventProcessing;
 
-public class ProjectionService(IOptions<RecallOptions> recallOptions, IOptions<SqlServerEventProcessingOptions> sqlServerEventProcessingOptions, IProjectionRepository projectionRepository, IProjectionQuery projectionQuery, IPrimitiveEventQuery primitiveEventQuery, IEventProcessorConfiguration eventProcessorConfiguration)
-    : IProjectionService, IPipelineObserver<ThreadPoolsStarted>
+public class PartitionedProjectionEventService(IOptions<RecallOptions> recallOptions, IOptions<SqlServerEventProcessingOptions> sqlServerEventProcessingOptions, IProjectionRepository projectionRepository, IProjectionQuery projectionQuery, IPrimitiveEventQuery primitiveEventQuery, IEventProcessorConfiguration eventProcessorConfiguration)
+    : IProjectionEventService, IPipelineObserver<ThreadPoolsStarted>
 {
     private readonly List<ProjectionExecutionContext> _projectionExecutionContexts = [];
     private readonly IEventProcessorConfiguration _eventProcessorConfiguration = Guard.AgainstNull(eventProcessorConfiguration);
@@ -78,7 +78,7 @@ public class ProjectionService(IOptions<RecallOptions> recallOptions, IOptions<S
         }
     }
 
-    public async Task<ProjectionEvent?> RetrieveEventAsync(IPipelineContext<RetrieveEvent> pipelineContext, CancellationToken cancellationToken = default)
+    public async Task<ProjectionEvent?> RetrieveAsync(IPipelineContext<RetrieveEvent> pipelineContext, CancellationToken cancellationToken = default)
     {
         var processorThreadManagedThreadId = Guard.AgainstNull(pipelineContext).Pipeline.State.GetProcessorThreadManagedThreadId();
 
@@ -143,7 +143,12 @@ public class ProjectionService(IOptions<RecallOptions> recallOptions, IOptions<S
         return null;
     }
 
-    public async Task AcknowledgeEventAsync(IPipelineContext<AcknowledgeEvent> pipelineContext, CancellationToken cancellationToken = default)
+    public Task PipelineFailedAsync(IPipelineContext<PipelineFailed> pipelineContext, CancellationToken cancellationToken = new CancellationToken())
+    {
+        return Task.CompletedTask;
+    }
+
+    public async Task AcknowledgeAsync(IPipelineContext<AcknowledgeEvent> pipelineContext, CancellationToken cancellationToken = default)
     {
         var projectionEvent = Guard.AgainstNull(pipelineContext).Pipeline.State.GetProjectionEvent();
 
@@ -196,7 +201,7 @@ public class ProjectionService(IOptions<RecallOptions> recallOptions, IOptions<S
         using (new TransactionScope(TransactionScopeOption.Suppress, TransactionScopeAsyncFlowOption.Enabled))
         {
             var specification = new PrimitiveEvent.Specification()
-                .WithMaximumRows(_sqlServerEventProcessingOptions.ProjectionBatchSize)
+                .WithMaximumRows(_sqlServerEventProcessingOptions.ProjectionPrefetchCount)
                 .WithSequenceNumberStart(projectionExecutionContext.Projection.SequenceNumber + 1);
 
             foreach (var primitiveEvent in (await _primitiveEventQuery.SearchAsync(specification)).OrderBy(item => item.SequenceNumber))
@@ -207,9 +212,9 @@ public class ProjectionService(IOptions<RecallOptions> recallOptions, IOptions<S
 
                 journalSequenceNumbers.Add(primitiveEvent.SequenceNumber!.Value);
             }
-        }
 
-        await _projectionRepository.RegisterJournalSequenceNumbersAsync(projectionExecutionContext.Projection.Name, journalSequenceNumbers).ConfigureAwait(false);
+            await _projectionRepository.RegisterJournalSequenceNumbersAsync(projectionExecutionContext.Projection.Name, journalSequenceNumbers).ConfigureAwait(false);
+        }
     }
 
     private class ProjectionExecutionContext(Projection projection, IEnumerable<TimeSpan> backoffDurations)
@@ -224,7 +229,7 @@ public class ProjectionService(IOptions<RecallOptions> recallOptions, IOptions<S
         public SemaphoreSlim Lock { get; } = new(1, 1);
 
         public Projection Projection { get; } = projection;
-        private long _commitSequenceNumber = 0;
+        private long _commitSequenceNumber;
 
         public void AddPrimitiveEvent(PrimitiveEvent primitiveEvent, int managedThreadId)
         {

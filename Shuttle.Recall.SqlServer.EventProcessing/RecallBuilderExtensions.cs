@@ -17,12 +17,13 @@ public static class RecallBuilderExtensions
 
             builder?.Invoke(sqlServerEventProcessingBuilder);
 
-            services
-                .AddSingleton<IValidateOptions<SqlServerEventProcessingOptions>, SqlServerEventProcessingOptionsValidator>()
-                .AddSingleton<IProjectionQuery, ProjectionQuery>()
-                .AddSingleton<IProjectionRepository, ProjectionRepository>()
-                .AddSingleton<ProjectionService>()
-                .AddSingleton<IProjectionService>(sp => sp.GetRequiredService<ProjectionService>());
+            services.TryAddSingleton<IValidateOptions<SqlServerEventProcessingOptions>, SqlServerEventProcessingOptionsValidator>();
+            services.TryAddScoped<IProjectionQuery, ProjectionQuery>();
+            services.TryAddScoped<IProjectionRepository, ProjectionRepository>();
+            //.AddSingleton<PartitionedProjectionService>()
+            //.AddSingleton<IProjectionService>(sp => sp.GetRequiredService<PartitionedProjectionService>())
+            services.TryAddScoped<IProjectionEventService, SequentialProjectionEventService>();
+            services.TryAddSingleton<ISequentialProjectionEventServiceContext, SequentialProjectionEventServiceContext>();
 
             services.AddOptions<SqlServerEventProcessingOptions>().Configure(options =>
             {
@@ -30,7 +31,19 @@ public static class RecallBuilderExtensions
                 options.Schema = sqlServerEventProcessingBuilder.Options.Schema;
                 options.CommandTimeout = sqlServerEventProcessingBuilder.Options.CommandTimeout;
                 options.ConfigureDatabase = sqlServerEventProcessingBuilder.Options.ConfigureDatabase;
-                options.ProjectionBatchSize = sqlServerEventProcessingBuilder.Options.ProjectionBatchSize;
+                options.ProjectionPrefetchCount = sqlServerEventProcessingBuilder.Options.ProjectionPrefetchCount;
+                options.MaximumCacheSize = sqlServerEventProcessingBuilder.Options.MaximumCacheSize;
+                options.CacheDuration = sqlServerEventProcessingBuilder.Options.CacheDuration;
+
+                if (options.MaximumCacheSize > 100_000)
+                {
+                    options.MaximumCacheSize = 100_000;
+                }
+
+                if (options.CacheDuration > TimeSpan.FromHours(1))
+                {
+                    options.CacheDuration = TimeSpan.FromHours(1);
+                }
             });
 
             recallBuilder.Services.TryAddEnumerable(ServiceDescriptor.Singleton<IHostedService, EventProcessingHostedService>());
@@ -39,7 +52,7 @@ public static class RecallBuilderExtensions
             {
                 dbContextFactoryBuilder.UseSqlServer(sqlServerEventProcessingBuilder.Options.ConnectionString, sqlServerOptions =>
                 {
-                    sqlServerOptions.CommandTimeout(sqlServerEventProcessingBuilder.Options.CommandTimeout);
+                    sqlServerOptions.CommandTimeout(sqlServerEventProcessingBuilder.Options.CommandTimeout.Seconds);
                 });
             });
 

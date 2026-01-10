@@ -9,17 +9,15 @@ using System.Text;
 namespace Shuttle.Recall.SqlServer.EventProcessing;
 
 [SuppressMessage("Security", "EF1002:Risk of vulnerability to SQL injection", Justification = "Schema and table names are from trusted configuration sources")]
-public class ProjectionRepository(IOptions<SqlServerEventProcessingOptions> sqlServerEventProcessingOptions, IDbContextFactory<SqlServerEventProcessingDbContext> dbContextFactory)
+public class ProjectionRepository(IOptions<SqlServerEventProcessingOptions> sqlServerEventProcessingOptions, SqlServerEventProcessingDbContext dbContext)
     : IProjectionRepository
 {
-    private readonly IDbContextFactory<SqlServerEventProcessingDbContext> _dbContextFactory = Guard.AgainstNull(dbContextFactory);
+    private readonly SqlServerEventProcessingDbContext _dbContext = Guard.AgainstNull(dbContext);
     private readonly SqlServerEventProcessingOptions _sqlServerEventProcessingOptions = Guard.AgainstNull(Guard.AgainstNull(sqlServerEventProcessingOptions).Value);
 
     public async Task<Projection> GetAsync(string name, CancellationToken cancellationToken = default)
     {
-        await using var dbContext = await _dbContextFactory.CreateDbContextAsync(cancellationToken);
-
-        var connection = dbContext.Database.GetDbConnection();
+        var connection = _dbContext.Database.GetDbConnection();
 
         await using var command = connection.CreateCommand();
 
@@ -64,10 +62,27 @@ WHERE
         return new(reader.GetString(0), reader.GetInt64(1));
     }
 
+    public async Task SaveAsync(Projection projection, CancellationToken cancellationToken = default)
+    {
+        Guard.AgainstNull(projection);
+
+        await _dbContext.Database.ExecuteSqlRawAsync(@$"
+UPDATE
+    [{_sqlServerEventProcessingOptions.Schema}].[Projection]
+SET
+    SequenceNumber = @SequenceNumber
+WHERE
+    Name = @Name
+",
+            [
+                new SqlParameter("@Name", projection.Name),
+                new SqlParameter("@SequenceNumber", projection.SequenceNumber)
+            ],
+            cancellationToken);
+    }
+
     public async Task CommitJournalSequenceNumbersAsync(string name, CancellationToken cancellationToken = default)
     {
-        await using var dbContext = await _dbContextFactory.CreateDbContextAsync(cancellationToken);
-
         var sql = @$"
 DECLARE @SequenceNumber BIGINT
 DECLARE @IncompleteCount INT;
@@ -152,9 +167,7 @@ VALUES
 ;
 ");
 
-                await using var dbContext = await _dbContextFactory.CreateDbContextAsync(cancellationToken);
-
-                await dbContext.Database.ExecuteSqlRawAsync(sql.ToString(),
+                await _dbContext.Database.ExecuteSqlRawAsync(sql.ToString(),
                     [
                         new SqlParameter("@Name", name)
                     ],
@@ -165,9 +178,7 @@ VALUES
 
     public async Task CompleteAsync(ProjectionEvent projectionEvent, CancellationToken cancellationToken = default)
     {
-        await using var dbContext = await _dbContextFactory.CreateDbContextAsync(cancellationToken);
-
-        await dbContext.Database.ExecuteSqlRawAsync(@$"
+        await _dbContext.Database.ExecuteSqlRawAsync(@$"
 UPDATE
     [{_sqlServerEventProcessingOptions.Schema}].[ProjectionJournal]
 SET
