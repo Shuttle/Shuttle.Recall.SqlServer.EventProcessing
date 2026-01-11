@@ -4,7 +4,6 @@ using Microsoft.Extensions.Options;
 using Shuttle.Core.Contract;
 using System.Data;
 using System.Diagnostics.CodeAnalysis;
-using System.Text;
 
 namespace Shuttle.Recall.SqlServer.EventProcessing;
 
@@ -62,7 +61,7 @@ WHERE
         return new(reader.GetString(0), reader.GetInt64(1));
     }
 
-    public async Task SaveAsync(Projection projection, CancellationToken cancellationToken = default)
+    public async Task CommitAsync(Projection projection, CancellationToken cancellationToken = default)
     {
         Guard.AgainstNull(projection);
 
@@ -70,126 +69,14 @@ WHERE
 UPDATE
     [{_sqlServerEventProcessingOptions.Schema}].[Projection]
 SET
-    SequenceNumber = @SequenceNumber
+    SequenceNumber = @SequenceNumber,
+    LockedAt = NULL
 WHERE
     Name = @Name
 ",
             [
                 new SqlParameter("@Name", projection.Name),
                 new SqlParameter("@SequenceNumber", projection.SequenceNumber)
-            ],
-            cancellationToken);
-    }
-
-    public async Task CommitJournalSequenceNumbersAsync(string name, CancellationToken cancellationToken = default)
-    {
-        var sql = @$"
-DECLARE @SequenceNumber BIGINT
-DECLARE @IncompleteCount INT;
-
-SELECT 
-    @IncompleteCount = COUNT(*)
-FROM 
-    [{_sqlServerEventProcessingOptions.Schema}].[ProjectionJournal]
-WHERE
-    [Name] = @Name
-AND
-    DateCompleted IS NULL;
-
-IF (@IncompleteCount > 0)
-BEGIN
-    DECLARE @ErrorMessage NVARCHAR(MAX);
-    SET @ErrorMessage = 'Cannot commit projection sequence number: incomplete journal entries exist for projection ' + @Name;
-    THROW 50001, @ErrorMessage, 1;
-END;
-
-SELECT 
-    @SequenceNumber = MAX(SequenceNumber)
-FROM 
-    [{_sqlServerEventProcessingOptions.Schema}].[ProjectionJournal]
-WHERE 
-    [Name] = @Name
-AND
-    DateCompleted IS NOT NULL;
-
-IF (@SequenceNumber IS NULL)
-BEGIN
-    RETURN;
-END;
-
-UPDATE 
-    [{_sqlServerEventProcessingOptions.Schema}].[Projection] 
-SET 
-    SequenceNumber = @SequenceNumber
-WHERE 
-    [Name] = @Name
-AND
-    SequenceNumber < @SequenceNumber;
-
-DELETE
-FROM
-    [{_sqlServerEventProcessingOptions.Schema}].[ProjectionJournal]
-WHERE
-    [Name] = @Name;
-";
-        await dbContext.Database.ExecuteSqlRawAsync(sql,
-            [
-                new SqlParameter("@Name", name)
-            ],
-            cancellationToken);
-    }
-
-    public async Task RegisterJournalSequenceNumbersAsync(string name, IEnumerable<long> sequenceNumbers, CancellationToken cancellationToken = default)
-    {
-        var sql = new StringBuilder($@"
-DELETE
-FROM
-    [{_sqlServerEventProcessingOptions.Schema}].[ProjectionJournal]
-WHERE
-    [Name] = @Name;
-");
-
-        var numbers = sequenceNumbers.ToList();
-
-        if (numbers.Any())
-        {
-            foreach (var chunk in numbers.Chunk(200))
-            {
-                sql.Append($@"
-INSERT INTO 
-    [{_sqlServerEventProcessingOptions.Schema}].[ProjectionJournal]
-(
-    [Name],
-    [SequenceNumber]
-)
-VALUES
-    {string.Join(",", chunk.Select(sequenceNumber => $"(@Name, {sequenceNumber})"))} 
-;
-");
-
-                await _dbContext.Database.ExecuteSqlRawAsync(sql.ToString(),
-                    [
-                        new SqlParameter("@Name", name)
-                    ],
-                    cancellationToken);
-            }
-        }
-    }
-
-    public async Task CompleteAsync(ProjectionEvent projectionEvent, CancellationToken cancellationToken = default)
-    {
-        await _dbContext.Database.ExecuteSqlRawAsync(@$"
-UPDATE
-    [{_sqlServerEventProcessingOptions.Schema}].[ProjectionJournal]
-SET
-    DateCompleted = GETUTCDATE()
-WHERE
-    Name = @Name
-AND 
-    SequenceNumber = @SequenceNumber",
-            [
-                new SqlParameter("@Name", projectionEvent.Projection.Name),
-                new SqlParameter("@SequenceNumber", projectionEvent.PrimitiveEvent.SequenceNumber!.Value)
             ],
             cancellationToken);
     }

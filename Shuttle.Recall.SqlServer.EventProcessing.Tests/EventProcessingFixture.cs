@@ -163,12 +163,12 @@ public class EventProcessingFixture : RecallFixture
 
     private static async Task StartingAsync(IServiceProvider serviceProvider)
     {
+        using var scope = serviceProvider.GetRequiredService<IServiceScopeFactory>().CreateScope();
+
         var sqlServerStorageOptions = serviceProvider.GetRequiredService<IOptions<SqlServerStorageOptions>>().Value;
         var sqlEventProcessingOptions = serviceProvider.GetRequiredService<IOptions<SqlServerEventProcessingOptions>>().Value;
-        var sqlServerStorageDbContextFactory = serviceProvider.GetRequiredService<IDbContextFactory<SqlServerStorageDbContext>>();
-        var sqlServerEventProcessingDbContext = serviceProvider.GetRequiredService<IDbContextFactory<SqlServerEventProcessingDbContext>>();
 
-        await using (var dbContext = await sqlServerStorageDbContextFactory.CreateDbContextAsync())
+        await using (var dbContext = scope.ServiceProvider.GetRequiredService<SqlServerStorageDbContext>())
         {
             await dbContext.Database.ExecuteSqlRawAsync(@$"
 IF EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'[{sqlServerStorageOptions.Schema}].[PrimitiveEvent]') AND type in (N'U'))
@@ -184,7 +184,7 @@ END
 ");
         }
 
-        await using (var dbContext = await sqlServerEventProcessingDbContext.CreateDbContextAsync())
+        await using (var dbContext = scope.ServiceProvider.GetRequiredService<SqlServerEventProcessingDbContext>())
         {
             await dbContext.Database.ExecuteSqlRawAsync(@$"
 IF EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'[{sqlEventProcessingOptions.Schema}].[Projection]') AND type in (N'U'))

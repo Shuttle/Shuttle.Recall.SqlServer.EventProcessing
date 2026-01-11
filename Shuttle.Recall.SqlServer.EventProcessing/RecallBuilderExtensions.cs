@@ -1,8 +1,11 @@
-﻿using Microsoft.EntityFrameworkCore;
+﻿using Microsoft.Data.SqlClient;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
+using System.Data.Common;
 
 namespace Shuttle.Recall.SqlServer.EventProcessing;
 
@@ -46,15 +49,34 @@ public static class RecallBuilderExtensions
 
             recallBuilder.Services.TryAddEnumerable(ServiceDescriptor.Singleton<IHostedService, EventProcessingHostedService>());
 
-            services.AddDbContextFactory<SqlServerEventProcessingDbContext>(dbContextFactoryBuilder =>
+            services.AddDbContext<SqlServerEventProcessingDbContext>((sp, options)=>
             {
-                dbContextFactoryBuilder.UseSqlServer(sqlServerEventProcessingBuilder.Options.ConnectionString, sqlServerOptions =>
+                var dbConnection = sp.GetService<DbConnection>();
+
+                if (dbConnection != null)
                 {
-                    sqlServerOptions.CommandTimeout(sqlServerEventProcessingBuilder.Options.CommandTimeout.Seconds);
-                });
+                    var sqlConnectionStringBuilder = new SqlConnectionStringBuilder(sqlServerEventProcessingBuilder.Options.ConnectionString);
+
+                    if (!dbConnection.Database.Equals(sqlConnectionStringBuilder.InitialCatalog, StringComparison.InvariantCultureIgnoreCase) ||
+                        !dbConnection.DataSource.Equals(sqlConnectionStringBuilder.DataSource, StringComparison.InvariantCultureIgnoreCase))
+                    {
+                        throw new ApplicationException(Resources.DbConnectionException);
+                    }
+
+                    options.UseSqlServer(dbConnection, Configure);
+                }
+                else
+                {
+                    options.UseSqlServer(sqlServerEventProcessingBuilder.Options.ConnectionString, Configure);
+                }
             });
 
             return recallBuilder;
+
+            void Configure(SqlServerDbContextOptionsBuilder sqlServerOptions)
+            {
+                sqlServerOptions.CommandTimeout(sqlServerEventProcessingBuilder.Options.CommandTimeout.Seconds);
+            }
         }
     }
 }

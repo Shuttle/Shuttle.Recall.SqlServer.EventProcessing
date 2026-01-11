@@ -23,7 +23,7 @@ public class SequentialProjectionEventService(IOptions<RecallOptions> recallOpti
 
         await _recallOptions.Operation.InvokeAsync(new($"[SequentialProjectionService.Acknowledge/Starting] : projection = '{projectionEvent.Projection.Name}' / sequence number = {projectionEvent.PrimitiveEvent.SequenceNumber}"), cancellationToken);
 
-        await _projectionRepository.SaveAsync(projectionEvent.Projection, cancellationToken);
+        await _projectionRepository.CommitAsync(projectionEvent.Projection, cancellationToken);
 
         if (_transaction != null)
         {
