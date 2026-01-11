@@ -16,46 +16,6 @@ public class ProjectionQuery(IOptions<RecallOptions> recallOptions, IOptions<Sql
     private readonly SqlServerEventProcessingOptions _sqlServerEventProcessingOptions = Guard.AgainstNull(Guard.AgainstNull(sqlServerEventProcessingOptions).Value);
     private readonly SqlServerEventProcessingDbContext _dbContext = Guard.AgainstNull(dbContext);
 
-    public async Task<IEnumerable<long>> GetIncompleteSequenceNumbersAsync(string name, CancellationToken cancellationToken = default)
-    {
-        Guard.AgainstEmpty(name);
-
-        var connection = _dbContext.Database.GetDbConnection();
-
-        await using var command = connection.CreateCommand();
-
-        command.Transaction = _dbContext.Database.CurrentTransaction?.GetDbTransaction();
-        
-        command.CommandText = $@"
-SELECT
-    [SequenceNumber]
-FROM
-    [{_sqlServerEventProcessingOptions.Schema}].[ProjectionJournal]
-WHERE
-    [Name] = @Name
-AND
-    [DateCompleted] IS NULL
-";
-
-        command.Parameters.Add(new SqlParameter("@Name", name));
-
-        if (connection.State != ConnectionState.Open)
-        {
-            await connection.OpenAsync(cancellationToken);
-        }
-        
-        var result = new List<long>();
-
-        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
-
-        while (await reader.ReadAsync(cancellationToken))
-        {
-            result.Add(reader.GetInt64(0));
-        }
-
-        return result;
-    }
-
     public async ValueTask<Projection?> GetAsync(CancellationToken cancellationToken = default)
     {
         await _recallOptions.Operation.InvokeAsync(new("[ProjectionQuery.Get/Starting]"), cancellationToken);
@@ -76,10 +36,12 @@ DECLARE @Name VARCHAR(650);
 (
     SELECT TOP (1)
         p.[SequenceNumber],
-        p.[Name]
+        p.[Name],
+        p.[LockedAt]
     FROM 
-        [{_sqlServerEventProcessingOptions.Schema}].[Projection] p
-    WITH (UPDLOCK, READPAST, ROWLOCK)
+        [{_sqlServerEventProcessingOptions.Schema}].[Projection] p WITH (UPDLOCK, READPAST, ROWLOCK)
+    WHERE
+        p.[LockedAt] IS NULL
     ORDER BY
         p.[SequenceNumber],
         p.[Name]
@@ -87,7 +49,7 @@ DECLARE @Name VARCHAR(650);
 UPDATE 
     cte
 SET 
-    SequenceNumber = SequenceNumber
+    [LockedAt] = SYSDATETIMEOFFSET()
 OUTPUT
     inserted.[Name],
     inserted.[SequenceNumber];
