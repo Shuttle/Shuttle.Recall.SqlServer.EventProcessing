@@ -20,8 +20,6 @@ public static class RecallBuilderExtensions
             services.TryAddSingleton<IValidateOptions<SqlServerEventProcessingOptions>, SqlServerEventProcessingOptionsValidator>();
             services.TryAddScoped<IProjectionQuery, ProjectionQuery>();
             services.TryAddScoped<IProjectionRepository, ProjectionRepository>();
-            //.AddSingleton<PartitionedProjectionService>()
-            //.AddSingleton<IProjectionService>(sp => sp.GetRequiredService<PartitionedProjectionService>())
             services.TryAddScoped<IProjectionEventService, SequentialProjectionEventService>();
             services.TryAddSingleton<ISequentialProjectionEventServiceContext, SequentialProjectionEventServiceContext>();
 
