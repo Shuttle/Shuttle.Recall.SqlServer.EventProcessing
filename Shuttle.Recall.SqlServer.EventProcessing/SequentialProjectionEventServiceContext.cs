@@ -37,7 +37,9 @@ public class SequentialProjectionEventServiceContext(IOptions<RecallOptions> rec
 
                 await _recallOptions.Operation.InvokeAsync(new($"[SequentialProjectionEventServiceContext.Retrieve/Search] : sequence number = {sequenceNumber} / primitive event count = {primitiveEvents.Count} / cache size = {_cache.Count}"), cancellationToken);
 
-                cachedPrimitiveEvent = primitiveEvents.FirstOrDefault(e => e.SequenceNumber == sequenceNumber);
+                // This would handle gaps (SequenceNumber >= sequenceNumber) although that really should not happen.
+                // Adding for legacy, but clearing projections and re-sequencing would be the preferred approach.
+                cachedPrimitiveEvent = primitiveEvents.FirstOrDefault(e => e.SequenceNumber >= sequenceNumber);
             }
         }
 

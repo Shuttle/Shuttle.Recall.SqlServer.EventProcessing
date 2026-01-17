@@ -60,7 +60,7 @@ public class SequentialProjectionEventService(IOptions<RecallOptions> recallOpti
         return primitiveEvent == null ? null : new(projection, primitiveEvent);
     }
 
-    public async Task PipelineFailedAsync(IPipelineContext<PipelineFailed> pipelineContext, CancellationToken cancellationToken = new CancellationToken())
+    public async Task PipelineFailedAsync(IPipelineContext<PipelineFailed> pipelineContext, CancellationToken cancellationToken = default)
     {
         if (_transaction != null)
         {
