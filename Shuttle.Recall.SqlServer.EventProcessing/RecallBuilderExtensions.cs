@@ -50,7 +50,7 @@ public static class RecallBuilderExtensions
 
             recallBuilder.Services.TryAddEnumerable(ServiceDescriptor.Singleton<IHostedService, EventProcessingHostedService>());
 
-            services.AddDbContext<SqlServerEventProcessingDbContext>((sp, options)=>
+            services.AddDbContext<SqlServerEventProcessingDbContext>((sp, options) =>
             {
                 var dbConnection = sp.GetService<DbConnection>();
 
