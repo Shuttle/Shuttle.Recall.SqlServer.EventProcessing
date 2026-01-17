@@ -42,6 +42,8 @@ DECLARE @Name VARCHAR(650);
         [{_sqlServerEventProcessingOptions.Schema}].[Projection] p WITH (UPDLOCK, READPAST, ROWLOCK)
     WHERE
         p.[LockedAt] IS NULL
+        OR
+        p.[LockedAt] < @LockedAtTimeout
     ORDER BY
         p.[SequenceNumber],
         p.[Name]
@@ -56,6 +58,8 @@ OUTPUT
 
 EXEC sp_releaseapplock @Resource = '{ResourceName}', @LockOwner = 'Session';
 ";
+
+        command.Parameters.Add(new SqlParameter("@LockedAtTimeout", DateTimeOffset.UtcNow.Subtract(_sqlServerEventProcessingOptions.ProjectionLockTimeout)));
 
         if (connection.State != ConnectionState.Open)
         {

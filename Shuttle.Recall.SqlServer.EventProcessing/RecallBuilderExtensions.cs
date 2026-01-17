@@ -33,6 +33,7 @@ public static class RecallBuilderExtensions
                 options.CommandTimeout = sqlServerEventProcessingBuilder.Options.CommandTimeout;
                 options.ConfigureDatabase = sqlServerEventProcessingBuilder.Options.ConfigureDatabase;
                 options.ProjectionPrefetchCount = sqlServerEventProcessingBuilder.Options.ProjectionPrefetchCount;
+                options.ProjectionLockTimeout = sqlServerEventProcessingBuilder.Options.ProjectionLockTimeout;
                 options.MaximumCacheSize = sqlServerEventProcessingBuilder.Options.MaximumCacheSize;
                 options.CacheDuration = sqlServerEventProcessingBuilder.Options.CacheDuration;
 
