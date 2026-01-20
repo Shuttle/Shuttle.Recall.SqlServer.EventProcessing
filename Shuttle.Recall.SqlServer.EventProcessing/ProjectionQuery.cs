@@ -41,9 +41,19 @@ DECLARE @Name VARCHAR(650);
     FROM 
         [{_sqlServerEventProcessingOptions.Schema}].[Projection] p WITH (UPDLOCK, READPAST, ROWLOCK)
     WHERE
-        p.[LockedAt] IS NULL
-        OR
-        p.[LockedAt] < @LockedAtTimeout
+        {(_recallOptions.EventProcessing.IncludedProjections.Count > 0
+            ? $"p.[Name] IN ({string.Join(',', _recallOptions.EventProcessing.IncludedProjections.Select(item => $"'{item}'"))}) AND"
+            : string.Empty
+        )}
+        {(_recallOptions.EventProcessing.ExcludedProjections.Count > 0
+            ? $"p.[Name] NOT IN ({string.Join(',', _recallOptions.EventProcessing.ExcludedProjections.Select(item => $"'{item}'"))}) AND"
+            : string.Empty
+        )}
+        (
+            p.[LockedAt] IS NULL
+            OR
+            p.[LockedAt] < @LockedAtTimeout
+        )
     ORDER BY
         p.[SequenceNumber],
         p.[Name]

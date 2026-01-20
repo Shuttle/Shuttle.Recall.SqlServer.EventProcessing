@@ -47,7 +47,7 @@ public class SequentialProjectionEventService(IOptions<RecallOptions> recallOpti
 
         if (projection == null)
         {
-            await _recallOptions.Operation.InvokeAsync(new($"[SequentialProjectionService.Retrieve/Completed] : projection = <null>"), cancellationToken);
+            await _recallOptions.Operation.InvokeAsync(new("[SequentialProjectionService.Retrieve/Completed] : projection = <null>"), cancellationToken);
             return null;
         }
 
@@ -58,6 +58,11 @@ public class SequentialProjectionEventService(IOptions<RecallOptions> recallOpti
         await _recallOptions.Operation.InvokeAsync(new($"[SequentialProjectionService.Retrieve/Completed] : projection = '{projection.Name}' / sequence number = {primitiveEvent?.SequenceNumber.ToString() ?? "<null>"}"), cancellationToken);
         
         return primitiveEvent == null ? null : new(projection, primitiveEvent);
+    }
+
+    public async Task DeferAsync(IPipelineContext<HandleEvent> pipelineContext, CancellationToken cancellationToken = new CancellationToken())
+    {
+        throw new NotImplementedException();
     }
 
     public async Task PipelineFailedAsync(IPipelineContext<PipelineFailed> pipelineContext, CancellationToken cancellationToken = default)
