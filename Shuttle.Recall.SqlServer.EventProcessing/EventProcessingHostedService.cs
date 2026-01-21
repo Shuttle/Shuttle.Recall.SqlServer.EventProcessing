@@ -107,6 +107,12 @@ BEGIN
     ADD [LockedAt] DATETIMEOFFSET(7) NULL;
 END
 
+IF COL_LENGTH('[{_sqlServerEventProcessingOptions.Schema}].[Projection]', 'DeferredUntil') IS NULL
+BEGIN
+    ALTER TABLE [{_sqlServerEventProcessingOptions.Schema}].[Projection]
+    ADD [DeferredUntil] DATETIMEOFFSET(7) NULL;
+END
+
 IF NOT EXISTS (SELECT * FROM sys.indexes WHERE name = N'IX_Projection_SequenceNumber_Name' AND object_id = OBJECT_ID(N'[{_sqlServerEventProcessingOptions.Schema}].[Projection]'))
 BEGIN
     CREATE NONCLUSTERED INDEX [IX_Projection_SequenceNumber_Name] 

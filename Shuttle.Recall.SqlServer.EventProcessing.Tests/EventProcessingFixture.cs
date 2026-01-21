@@ -1,12 +1,13 @@
 ﻿using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
 using NUnit.Framework;
+using Shuttle.Core.Pipelines.Logging;
 using Shuttle.Recall.SqlServer.Storage;
 using Shuttle.Recall.Testing;
 using System.Diagnostics.CodeAnalysis;
-using Shuttle.Core.Pipelines.Logging;
 
 namespace Shuttle.Recall.SqlServer.EventProcessing.Tests;
 
@@ -81,10 +82,46 @@ public class EventProcessingFixture : RecallFixture
                         builder.Options.Schema = "recall_fixture";
                     });
             })
+            .WithStarting(StartingAsync);
+
+        await ExerciseEventProcessingWithDelayAsync(fixtureOptions, isTransactional);
+    }
+
+    [Test]
+    [TestCase(true)]
+    [TestCase(false)]
+    public async Task Should_be_able_to_exercise_event_processing_with_deferred_handling_async(bool isTransactional)
+    {
+        var configuration = new ConfigurationBuilder()
+            .AddUserSecrets<EventProcessingFixture>()
+            .Build();
+
+        var services = new ServiceCollection()
+            .AddSingleton<IConfiguration>(configuration)
+            .AddPipelineLogging();
+
+        var fixtureOptions = new RecallFixtureOptions(services)
+            .WithAddRecall(recallBuilder =>
+            {
+                recallBuilder.Options.EventStore.PrimitiveEventSequencerIdleDurations = [TimeSpan.FromMilliseconds(250)];
+                recallBuilder.Options.EventProcessing.ProjectionProcessorIdleDurations = [TimeSpan.FromMilliseconds(250)];
+
+                recallBuilder
+                    .UseSqlServerEventStorage(builder =>
+                    {
+                        builder.Options.ConnectionString = configuration.GetConnectionString("StorageConnection") ?? throw new ApplicationException("A 'ConnectionString' with name 'StorageConnection' is required which points to a Sql Server database that will contain the event storage.");
+                        builder.Options.Schema = "recall_fixture";
+                    })
+                    .UseSqlServerEventProcessing(builder =>
+                    {
+                        builder.Options.ConnectionString = configuration.GetConnectionString("EventProcessingConnection") ?? throw new ApplicationException("A 'ConnectionString' with name 'EventProcessingConnection' is required which points to a Sql Server database that will contain the projections.");
+                        builder.Options.Schema = "recall_fixture";
+                    });
+            })
             .WithStarting(StartingAsync)
             .WithEventProcessingHandlerTimeout(TimeSpan.FromMinutes(5));
 
-        await ExerciseEventProcessingWithDelayAsync(fixtureOptions, isTransactional);
+        await ExerciseEventProcessingWithDeferredHandlingAsync(fixtureOptions, isTransactional);
     }
 
     [Test]

@@ -69,14 +69,34 @@ WHERE
 UPDATE
     [{_sqlServerEventProcessingOptions.Schema}].[Projection]
 SET
-    SequenceNumber = @SequenceNumber,
-    LockedAt = NULL
+    [SequenceNumber] = @SequenceNumber,
+    [LockedAt] = NULL
 WHERE
     Name = @Name
 ",
             [
                 new SqlParameter("@Name", projection.Name),
                 new SqlParameter("@SequenceNumber", projection.SequenceNumber)
+            ],
+            cancellationToken);
+    }
+
+    public async Task DeferAsync(Projection projection, DateTimeOffset deferredUntil, CancellationToken cancellationToken = default)
+    {
+        Guard.AgainstNull(projection);
+
+        await _dbContext.Database.ExecuteSqlRawAsync(@$"
+UPDATE
+    [{_sqlServerEventProcessingOptions.Schema}].[Projection]
+SET
+    [LockedAt] = NULL,
+    [DeferredUntil] = @DeferredUntil
+WHERE
+    Name = @Name
+",
+            [
+                new SqlParameter("@Name", projection.Name),
+                new SqlParameter("@DeferredUntil", deferredUntil)
             ],
             cancellationToken);
     }

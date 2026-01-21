@@ -31,13 +31,15 @@ EXEC sp_getapplock @Resource = '{ResourceName}', @LockMode = 'Exclusive', @LockO
 
 DECLARE @SequenceNumber BIGINT;
 DECLARE @Name VARCHAR(650);
+DECLARE @Now DATETIMEOFFSET = SYSDATETIMEOFFSET();
 
 ;WITH cte AS
 (
     SELECT TOP (1)
         p.[SequenceNumber],
         p.[Name],
-        p.[LockedAt]
+        p.[LockedAt],
+        p.[DeferredUntil]
     FROM 
         [{_sqlServerEventProcessingOptions.Schema}].[Projection] p WITH (UPDLOCK, READPAST, ROWLOCK)
     WHERE
@@ -54,6 +56,12 @@ DECLARE @Name VARCHAR(650);
             OR
             p.[LockedAt] < @LockedAtTimeout
         )
+        AND
+        (
+            p.[DeferredUntil] IS NULL
+            OR
+            p.[DeferredUntil] < @Now
+        )
     ORDER BY
         p.[SequenceNumber],
         p.[Name]
@@ -61,7 +69,8 @@ DECLARE @Name VARCHAR(650);
 UPDATE 
     cte
 SET 
-    [LockedAt] = SYSDATETIMEOFFSET()
+    [LockedAt] = @Now,
+    [DeferredUntil] = NULL
 OUTPUT
     inserted.[Name],
     inserted.[SequenceNumber];

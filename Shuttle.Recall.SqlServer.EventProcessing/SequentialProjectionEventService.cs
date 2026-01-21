@@ -1,4 +1,5 @@
-﻿using Microsoft.EntityFrameworkCore.Storage;
+﻿using System.Transactions;
+using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.Extensions.Options;
 using Shuttle.Core.Contract;
 using Shuttle.Core.Pipelines;
@@ -60,9 +61,27 @@ public class SequentialProjectionEventService(IOptions<RecallOptions> recallOpti
         return primitiveEvent == null ? null : new(projection, primitiveEvent);
     }
 
-    public async Task DeferAsync(IPipelineContext<HandleEvent> pipelineContext, CancellationToken cancellationToken = new CancellationToken())
+    public async Task DeferAsync(IPipelineContext<HandleEvent> pipelineContext, CancellationToken cancellationToken = default)
     {
-        throw new NotImplementedException();
+        var projectionEvent = Guard.AgainstNull(pipelineContext).Pipeline.State.GetProjectionEvent();
+        var deferredUntil = Guard.AgainstNull(pipelineContext).Pipeline.State.GetDeferredUntil();
+
+        if (!deferredUntil.HasValue)
+        {
+            return;
+        }
+
+        await _projectionRepository.DeferAsync(projectionEvent.Projection, deferredUntil.Value, cancellationToken);
+
+        if (_transaction != null)
+        {
+            await _transaction.CommitAsync(CancellationToken.None);
+            await _transaction.DisposeAsync();
+        }
+        else
+        {
+            Guard.AgainstNull(pipelineContext.Pipeline.State.GetTransactionScope()).Complete();
+        }
     }
 
     public async Task PipelineFailedAsync(IPipelineContext<PipelineFailed> pipelineContext, CancellationToken cancellationToken = default)
