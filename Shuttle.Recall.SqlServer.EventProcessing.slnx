@@ -5,4 +5,5 @@
   </Folder>
   <Project Path="Shuttle.Recall.SqlServer.EventProcessing.Tests/Shuttle.Recall.SqlServer.EventProcessing.Tests.csproj" Id="f1b2590a-ce42-45a4-94a8-516aaf198933" />
   <Project Path="Shuttle.Recall.SqlServer.EventProcessing/Shuttle.Recall.SqlServer.EventProcessing.csproj" />
+  <Project Path="Shuttle.Recall.SqlServer.EventProcessing.Database/Shuttle.Recall.SqlServer.EventProcessing.Database.csproj" />
 </Solution>
