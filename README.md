@@ -1,23 +1,22 @@
-# Sql Server
+# Shuttle.Recall.SqlServer.EventProcessing
 
-```
-PM> Install-Package Shuttle.Recall.Sql.EventProcessing
-```
+A Sql Server implementation of the `Shuttle.Recall` event projection processing mechanism.
 
-A Sql Server implementation of the `Shuttle.Recall` event sourcing mechanism.
+## Installation
+
+```bash
+dotnet add package Shuttle.Recall.SqlServer.EventProcessing
+```
 
 ## Configuration
 
 ```c#
-services.AddSqlEventProcessing(builder => 
+services.AddRecall(builder => 
 {
-	builder.Options.EventProjectionConnectionStringName = "event-projection-connection-string-name";
-	builder.Options.EventStoreConnectionStringName = "event-store-connection-string-name";
-});
-
-services.AddEventStore(builder =>
-{
-    builder.AddEventHandler<ProjectionNameHandler>("ProjectionName");
+    builder.UseSqlServerEventProcessing(options => 
+    {
+        options.ConnectionString = "connection-string";
+    });
 });
 ```
 
@@ -26,24 +25,24 @@ The default JSON settings structure is as follows:
 ```json
 {
   "Shuttle": {
-    "EventProcessing": {
-      "EventProjectionConnectionStringName": "event-projection-connection-string-name",
-      "EventStoreConnectionStringName": "event-store-connection-string-name"
+    "Recall": {
+      "SqlServer": {
+        "EventProcessing": {
+          "ConnectionString": "connection-string",
+          "Schema": "dbo",
+          "CommandTimeout": "00:00:30",
+          "ProjectionPrefetchCount": 100,
+          "ConfigureDatabase": true,
+          "MaximumCacheSize": 1000,
+          "CacheDuration": "00:01:00",
+          "ProjectionLockTimeout": "00:00:30"
+        }
+      }
     }
   }
 }
 ```
+
 ## Database
 
-In order to create the relevant database structures execute the relevant `ProjectionCreate.sql` script:
-
-```
-%userprofile%\.nuget\packages\shuttle.recall.sql.eventprocessing\{version}\scripts\{provider}\ProjectionCreate.sql
-```
-
-## Supported providers
-
-- `Microsoft.Data.SqlClient`
-- `System.Data.SqlClient`
-
-If you'd like support for another SQL-based provider please feel free to give it a bash and send a pull request if you *do* go this route.  You are welcome to create an issue and assistance will be provided where possible.
+In order to create the relevant database structures you can use the `Shuttle.Recall.SqlServer.EventProcessing.Database` console application and provide the `connection-string` and (optional) `schema` arguments.  Alternatively, you can let the library create the structures by setting the `ConfigureDatabase` option to `true` (which is the default).
