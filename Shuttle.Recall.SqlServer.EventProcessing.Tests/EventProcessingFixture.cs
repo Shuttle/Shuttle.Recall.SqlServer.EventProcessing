@@ -1,10 +1,8 @@
 ﻿using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
 using NUnit.Framework;
-using Shuttle.Core.Pipelines.Logging;
 using Shuttle.Recall.SqlServer.Storage;
 using Shuttle.Recall.Testing;
 using System.Diagnostics.CodeAnalysis;
@@ -24,8 +22,7 @@ public class EventProcessingFixture : RecallFixture
             .Build();
 
         var services = new ServiceCollection()
-            .AddSingleton<IConfiguration>(configuration)
-            .AddPipelineLogging();
+            .AddSingleton<IConfiguration>(configuration);
 
         var fixtureOptions = new RecallFixtureOptions(services)
             .WithAddRecall(recallBuilder =>
@@ -61,8 +58,7 @@ public class EventProcessingFixture : RecallFixture
             .Build();
 
         var services = new ServiceCollection()
-            .AddSingleton<IConfiguration>(configuration)
-            .AddPipelineLogging();
+            .AddSingleton<IConfiguration>(configuration);
 
         var fixtureOptions = new RecallFixtureOptions(services)
             .WithAddRecall(recallBuilder =>
@@ -97,8 +93,7 @@ public class EventProcessingFixture : RecallFixture
             .Build();
 
         var services = new ServiceCollection()
-            .AddSingleton<IConfiguration>(configuration)
-            .AddPipelineLogging();
+            .AddSingleton<IConfiguration>(configuration);
 
         var fixtureOptions = new RecallFixtureOptions(services)
             .WithAddRecall(recallBuilder =>
@@ -134,8 +129,7 @@ public class EventProcessingFixture : RecallFixture
             .Build();
 
         var services = new ServiceCollection()
-            .AddSingleton<IConfiguration>(configuration)
-            .AddPipelineLogging();
+            .AddSingleton<IConfiguration>(configuration);
 
         var fixtureOptions = new RecallFixtureOptions(services)
             .WithAddRecall(recallBuilder =>
@@ -170,8 +164,7 @@ public class EventProcessingFixture : RecallFixture
             .Build();
 
         var services = new ServiceCollection()
-            .AddSingleton<IConfiguration>(configuration)
-            .AddPipelineLogging();
+            .AddSingleton<IConfiguration>(configuration);
 
         var fixtureOptions = new RecallFixtureOptions(services)
             .WithStarting(StartingAsync)
