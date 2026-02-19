@@ -37,9 +37,9 @@ public class SequentialProjectionEventService(IOptions<RecallOptions> recallOpti
 
     public async Task<ProjectionEvent?> RetrieveAsync(IPipelineContext<RetrieveEvent> pipelineContext, CancellationToken cancellationToken = default)
     {
-        await _recallOptions.Operation.InvokeAsync(new($"[SequentialProjectionService.Retrieve/Starting]"), cancellationToken);
+        await _recallOptions.Operation.InvokeAsync(new("[SequentialProjectionService.Retrieve/Starting]"), cancellationToken);
         
-        if (System.Transactions.Transaction.Current == null)
+        if (Transaction.Current == null)
         {
             _transaction = await _dbContext.Database.BeginTransactionAsync(cancellationToken);
         }
@@ -80,7 +80,7 @@ public class SequentialProjectionEventService(IOptions<RecallOptions> recallOpti
         }
         else
         {
-            Guard.AgainstNull(pipelineContext.Pipeline.State.GetTransactionScope()).Complete();
+            pipelineContext.Pipeline.TransactionScope?.Complete();
         }
     }
 

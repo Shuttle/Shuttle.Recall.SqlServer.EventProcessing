@@ -52,7 +52,7 @@ public static class RecallBuilderExtensions
 
             services.AddDbContext<SqlServerEventProcessingDbContext>((sp, options) =>
             {
-                var dbConnection = sp.GetService<DbConnection>();
+                var dbConnection = sp.GetKeyedService<DbConnection>(sqlServerEventProcessingBuilder.Options.DbConnectionServiceKey);
 
                 if (dbConnection != null)
                 {
