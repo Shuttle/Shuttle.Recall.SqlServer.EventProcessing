@@ -36,6 +36,7 @@ public static class RecallBuilderExtensions
                 options.ProjectionLockTimeout = sqlServerEventProcessingBuilder.Options.ProjectionLockTimeout;
                 options.MaximumCacheSize = sqlServerEventProcessingBuilder.Options.MaximumCacheSize;
                 options.CacheDuration = sqlServerEventProcessingBuilder.Options.CacheDuration;
+                options.DbConnectionServiceKey = sqlServerEventProcessingBuilder.Options.DbConnectionServiceKey;
 
                 if (options.MaximumCacheSize > 100_000)
                 {

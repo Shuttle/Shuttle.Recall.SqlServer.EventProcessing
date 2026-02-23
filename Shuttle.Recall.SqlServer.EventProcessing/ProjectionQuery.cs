@@ -100,4 +100,35 @@ EXEC sp_releaseapplock @Resource = '{ResourceName}', @LockOwner = 'Session';
 
         return result;
     }
+
+    public async ValueTask<bool> HasPendingProjectionsAsync(long sequenceNumber, CancellationToken cancellationToken = default)
+    {
+        var connection = _dbContext.Database.GetDbConnection();
+
+        await using var command = connection.CreateCommand();
+
+        command.CommandText = @"
+IF EXISTS
+(
+    SELECT
+        NULL
+    FROM
+        [{_sqlServerStorageOptions.Schema}].Projection
+    WHERE
+        SequenceNumber < @SequenceNumber
+)
+    SELECT 1
+ELSE
+    SELECT 0
+";
+
+        command.Parameters.Add(new SqlParameter("@SequenceNumber", sequenceNumber));
+
+        if (connection.State != ConnectionState.Open)
+        {
+            await connection.OpenAsync(cancellationToken);
+        }
+
+        return (int)(await command.ExecuteScalarAsync(cancellationToken) ?? 1) == 1;
+    }
 }
