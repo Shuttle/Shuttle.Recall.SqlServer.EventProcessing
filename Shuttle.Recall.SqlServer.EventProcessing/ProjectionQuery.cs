@@ -107,13 +107,13 @@ EXEC sp_releaseapplock @Resource = '{ResourceName}', @LockOwner = 'Session';
 
         await using var command = connection.CreateCommand();
 
-        command.CommandText = @"
+        command.CommandText = @$"
 IF EXISTS
 (
     SELECT
         NULL
     FROM
-        [{_sqlServerStorageOptions.Schema}].Projection
+        [{_sqlServerEventProcessingOptions.Schema}].Projection
     WHERE
         SequenceNumber < @SequenceNumber
 )
