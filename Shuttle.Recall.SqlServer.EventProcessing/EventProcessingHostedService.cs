@@ -25,57 +25,17 @@ public class EventProcessingHostedService(IOptions<RecallOptions> recallOptions,
 
         await using var dbContext = scope.ServiceProvider.GetRequiredService<SqlServerEventProcessingDbContext>();
         
-        await _recallOptions.Operation.InvokeAsync(new($"[EventProcessingHostedService.Projections] : count = {_eventProcessorConfiguration.Projections.Count()}"), cancellationToken);
-
-        foreach (var projectionConfiguration in _eventProcessorConfiguration.Projections)
+        if (_sqlServerEventProcessingOptions.ConfigureDatabase)
         {
-            var connection = dbContext.Database.GetDbConnection();
+            var retry = true;
+            var retryCount = 0;
 
-            await using var command = connection.CreateCommand();
-
-            command.CommandText = $@"
-IF NOT EXISTS (SELECT NULL FROM [{_sqlServerEventProcessingOptions.Schema}].[Projection] WHERE [Name] = @Name)
-BEGIN
-    INSERT INTO [{_sqlServerEventProcessingOptions.Schema}].[Projection] 
-    (
-        [Name], 
-        [SequenceNumber]
-    ) 
-    VALUES 
-    (
-        @Name, 
-        0
-    )
-END
-";
-
-            command.Parameters.Add(new SqlParameter("@Name", projectionConfiguration.Name));
-
-            if (connection.State != ConnectionState.Open)
+            while (retry)
             {
-                await connection.OpenAsync(cancellationToken);
-            }
+                await _recallOptions.Operation.InvokeAsync(new($"[EventProcessingHostedService.ConfigureDatabase/Starting] : retry count = {retryCount}"), cancellationToken);
 
-            await command.ExecuteNonQueryAsync(cancellationToken);
-
-            await _recallOptions.Operation.InvokeAsync(new($"[EventProcessingHostedService.Projections/Configured] : name = {projectionConfiguration.Name} / event type count = {projectionConfiguration.EventTypes.Count()}"), cancellationToken);
-        }
-
-        if (!_sqlServerEventProcessingOptions.ConfigureDatabase)
-        {
-            await _recallOptions.Operation.InvokeAsync(new("[EventProcessingHostedService.ConfigureDatabase/Disabled]"), cancellationToken);
-            return;
-        }
-
-        var retry = true;
-        var retryCount = 0;
-
-        while (retry)
-        {
-            await _recallOptions.Operation.InvokeAsync(new($"[EventProcessingHostedService.ConfigureDatabase/Starting] : retry count = {retryCount}"), cancellationToken);
-
-            try
-            {
+                try
+                {
                     await dbContext.Database.ExecuteSqlRawAsync($@"
 EXEC sp_getapplock @Resource = '{typeof(EventProcessingHostedService).FullName}', @LockMode = 'Exclusive', @LockOwner = 'Session', @LockTimeout = 15000;
 
@@ -131,21 +91,62 @@ END
 EXEC sp_releaseapplock @Resource = '{typeof(EventProcessingHostedService).FullName}', @LockOwner = 'Session';
 ", cancellationToken);
 
-                await _recallOptions.Operation.InvokeAsync(new($"[EventProcessingHostedService.ConfigureDatabase/Completed] : retry count = {retryCount}"), cancellationToken);
+                    await _recallOptions.Operation.InvokeAsync(new($"[EventProcessingHostedService.ConfigureDatabase/Completed] : retry count = {retryCount}"), cancellationToken);
 
-                retry = false;
-            }
-            catch (Exception ex)
-            {
-                await _recallOptions.Operation.InvokeAsync(new($"[EventProcessingHostedService.ConfigureDatabase/Failed] : exception = {ex.AllMessages()}"), cancellationToken);
-
-                retryCount++;
-
-                if (retryCount > 3)
+                    retry = false;
+                }
+                catch (Exception ex)
                 {
-                    throw;
+                    await _recallOptions.Operation.InvokeAsync(new($"[EventProcessingHostedService.ConfigureDatabase/Failed] : exception = {ex.AllMessages()}"), cancellationToken);
+
+                    retryCount++;
+
+                    if (retryCount > 3)
+                    {
+                        throw;
+                    }
                 }
             }
+        }
+        else
+        {
+            await _recallOptions.Operation.InvokeAsync(new("[EventProcessingHostedService.ConfigureDatabase/Disabled]"), cancellationToken);
+        }
+
+        await _recallOptions.Operation.InvokeAsync(new($"[EventProcessingHostedService.Projections] : count = {_eventProcessorConfiguration.Projections.Count()}"), cancellationToken);
+
+        foreach (var projectionConfiguration in _eventProcessorConfiguration.Projections)
+        {
+            var connection = dbContext.Database.GetDbConnection();
+
+            await using var command = connection.CreateCommand();
+
+            command.CommandText = $@"
+IF NOT EXISTS (SELECT NULL FROM [{_sqlServerEventProcessingOptions.Schema}].[Projection] WHERE [Name] = @Name)
+BEGIN
+    INSERT INTO [{_sqlServerEventProcessingOptions.Schema}].[Projection] 
+    (
+        [Name], 
+        [SequenceNumber]
+    ) 
+    VALUES 
+    (
+        @Name, 
+        0
+    )
+END
+";
+
+            command.Parameters.Add(new SqlParameter("@Name", projectionConfiguration.Name));
+
+            if (connection.State != ConnectionState.Open)
+            {
+                await connection.OpenAsync(cancellationToken);
+            }
+
+            await command.ExecuteNonQueryAsync(cancellationToken);
+
+            await _recallOptions.Operation.InvokeAsync(new($"[EventProcessingHostedService.Projections/Configured] : name = {projectionConfiguration.Name} / event type count = {projectionConfiguration.EventTypes.Count()}"), cancellationToken);
         }
     }
 
