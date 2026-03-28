@@ -8,13 +8,13 @@
 
   <ItemGroup>
     <PackageReference Include="Microsoft.EntityFrameworkCore.SqlServer" Version="10.0.3" />
-    <PackageReference Include="Shuttle.Recall" Version="21.0.2-rc2" />
-    <PackageReference Include="Shuttle.Recall.SqlServer.Storage" Version="21.0.2-rc2" />
+    <PackageReference Include="Shuttle.Recall" Version="21.0.2-rc3" />
+    <PackageReference Include="Shuttle.Recall.SqlServer.Storage" Version="21.0.2-rc3" />
   </ItemGroup>
 
   <PropertyGroup>
     <Description>Sql Server event projection processing.</Description>
-    <Version>21.0.2-rc2</Version>
+    <Version>21.0.2-rc3</Version>
     <PackageProjectUrl></PackageProjectUrl>
     <RepositoryUrl>https://github.com/Shuttle/Shuttle.Recall.SqlServer.Storage.git</RepositoryUrl>
     <PackageTags>eventsourcing eventsource event-sourcing event-source eventstore event-store project event-processing eventprocessing</PackageTags>
