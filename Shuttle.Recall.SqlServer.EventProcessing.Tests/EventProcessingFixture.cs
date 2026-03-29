@@ -27,8 +27,11 @@ public class EventProcessingFixture : RecallFixture
         var fixtureOptions = new RecallFixtureOptions(services)
             .WithAddRecall(recallBuilder =>
             {
-                recallBuilder.Options.EventStore.PrimitiveEventSequencerIdleDurations = [TimeSpan.FromMilliseconds(250)];
-                recallBuilder.Options.EventProcessing.ProjectionProcessorIdleDurations = [TimeSpan.FromMilliseconds(250)];
+                recallBuilder.Configure(options =>
+                {
+                    options.EventStore.PrimitiveEventSequencerIdleDurations = [TimeSpan.FromMilliseconds(250)];
+                    options.EventProcessing.ProjectionProcessorIdleDurations = [TimeSpan.FromMilliseconds(250)];
+                });
 
                 recallBuilder
                     .UseSqlServerEventStorage(builder =>
@@ -63,8 +66,11 @@ public class EventProcessingFixture : RecallFixture
         var fixtureOptions = new RecallFixtureOptions(services)
             .WithAddRecall(recallBuilder =>
             {
-                recallBuilder.Options.EventStore.PrimitiveEventSequencerIdleDurations = [TimeSpan.FromMilliseconds(250)];
-                recallBuilder.Options.EventProcessing.ProjectionProcessorIdleDurations = [TimeSpan.FromMilliseconds(250)];
+                recallBuilder.Configure(options =>
+                {
+                    options.EventStore.PrimitiveEventSequencerIdleDurations = [TimeSpan.FromMilliseconds(250)];
+                    options.EventProcessing.ProjectionProcessorIdleDurations = [TimeSpan.FromMilliseconds(250)];
+                });
 
                 recallBuilder
                     .UseSqlServerEventStorage(builder =>
@@ -98,8 +104,11 @@ public class EventProcessingFixture : RecallFixture
         var fixtureOptions = new RecallFixtureOptions(services)
             .WithAddRecall(recallBuilder =>
             {
-                recallBuilder.Options.EventStore.PrimitiveEventSequencerIdleDurations = [TimeSpan.FromMilliseconds(250)];
-                recallBuilder.Options.EventProcessing.ProjectionProcessorIdleDurations = [TimeSpan.FromMilliseconds(250)];
+                recallBuilder.Configure(options =>
+                {
+                    options.EventStore.PrimitiveEventSequencerIdleDurations = [TimeSpan.FromMilliseconds(250)];
+                    options.EventProcessing.ProjectionProcessorIdleDurations = [TimeSpan.FromMilliseconds(250)];
+                });
 
                 recallBuilder
                     .UseSqlServerEventStorage(builder =>
@@ -134,8 +143,11 @@ public class EventProcessingFixture : RecallFixture
         var fixtureOptions = new RecallFixtureOptions(services)
             .WithAddRecall(recallBuilder =>
             {
-                recallBuilder.Options.EventStore.PrimitiveEventSequencerIdleDurations = [TimeSpan.FromMilliseconds(250)];
-                recallBuilder.Options.EventProcessing.ProjectionProcessorIdleDurations = [TimeSpan.FromMilliseconds(250)];
+                recallBuilder.Configure(options =>
+                {
+                    options.EventStore.PrimitiveEventSequencerIdleDurations = [TimeSpan.FromMilliseconds(250)];
+                    options.EventProcessing.ProjectionProcessorIdleDurations = [TimeSpan.FromMilliseconds(250)];
+                });
 
                 recallBuilder
                     .UseSqlServerEventStorage(builder =>
@@ -170,9 +182,12 @@ public class EventProcessingFixture : RecallFixture
             .WithStarting(StartingAsync)
             .WithAddRecall(recallBuilder =>
             {
-                recallBuilder.Options.EventStore.PrimitiveEventSequencerIdleDurations = [TimeSpan.FromMilliseconds(250)];
-                recallBuilder.Options.EventProcessing.ProjectionProcessorIdleDurations = [TimeSpan.FromMilliseconds(250)];
-                recallBuilder.Options.EventProcessing.ProjectionThreadCount = 5;
+                recallBuilder.Configure(options =>
+                {
+                    options.EventStore.PrimitiveEventSequencerIdleDurations = [TimeSpan.FromMilliseconds(250)];
+                    options.EventProcessing.ProjectionProcessorIdleDurations = [TimeSpan.FromMilliseconds(250)];
+                    options.EventProcessing.ProjectionThreadCount = 5;
+                });
 
                 recallBuilder
                     .UseSqlServerEventStorage(builder =>
