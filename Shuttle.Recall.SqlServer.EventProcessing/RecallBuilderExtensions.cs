@@ -13,30 +13,19 @@ public static class RecallBuilderExtensions
 {
     extension(RecallBuilder recallBuilder)
     {
-        public RecallBuilder UseSqlServerEventProcessing(Action<SqlServerEventProcessingBuilder>? builder = null)
+        public RecallBuilder UseSqlServerEventProcessing(Action<SqlServerEventProcessingOptions>? configureOptions)
         {
             var services = recallBuilder.Services;
-            var sqlServerEventProcessingBuilder = new SqlServerEventProcessingBuilder(services);
 
-            builder?.Invoke(sqlServerEventProcessingBuilder);
-
-            services.TryAddSingleton<IValidateOptions<SqlServerEventProcessingOptions>, SqlServerEventProcessingOptionsValidator>();
-            services.TryAddScoped<IProjectionQuery, ProjectionQuery>();
-            services.TryAddScoped<IProjectionRepository, ProjectionRepository>();
-            services.TryAddScoped<IProjectionEventService, SequentialProjectionEventService>();
-            services.TryAddSingleton<ISequentialProjectionEventServiceContext, SequentialProjectionEventServiceContext>();
+            services.AddSingleton<IValidateOptions<SqlServerEventProcessingOptions>, SqlServerEventProcessingOptionsValidator>();
+            services.AddScoped<IProjectionQuery, ProjectionQuery>();
+            services.AddScoped<IProjectionRepository, ProjectionRepository>();
+            services.AddScoped<IProjectionEventService, SequentialProjectionEventService>();
+            services.AddSingleton<ISequentialProjectionEventServiceContext, SequentialProjectionEventServiceContext>();
 
             services.AddOptions<SqlServerEventProcessingOptions>().Configure(options =>
             {
-                options.ConnectionString = sqlServerEventProcessingBuilder.Options.ConnectionString;
-                options.Schema = sqlServerEventProcessingBuilder.Options.Schema;
-                options.CommandTimeout = sqlServerEventProcessingBuilder.Options.CommandTimeout;
-                options.ConfigureDatabase = sqlServerEventProcessingBuilder.Options.ConfigureDatabase;
-                options.ProjectionPrefetchCount = sqlServerEventProcessingBuilder.Options.ProjectionPrefetchCount;
-                options.ProjectionLockTimeout = sqlServerEventProcessingBuilder.Options.ProjectionLockTimeout;
-                options.MaximumCacheSize = sqlServerEventProcessingBuilder.Options.MaximumCacheSize;
-                options.CacheDuration = sqlServerEventProcessingBuilder.Options.CacheDuration;
-                options.DbConnectionServiceKey = sqlServerEventProcessingBuilder.Options.DbConnectionServiceKey;
+                configureOptions?.Invoke(options);
 
                 if (options.MaximumCacheSize > 100_000)
                 {
@@ -51,13 +40,14 @@ public static class RecallBuilderExtensions
 
             recallBuilder.Services.TryAddEnumerable(ServiceDescriptor.Singleton<IHostedService, EventProcessingHostedService>());
 
-            services.AddDbContext<SqlServerEventProcessingDbContext>((sp, options) =>
+            services.AddDbContext<SqlServerEventProcessingDbContext>((serviceProvider, options) =>
             {
-                var dbConnection = sp.GetKeyedService<DbConnection>(sqlServerEventProcessingBuilder.Options.DbConnectionServiceKey);
+                var sqlServerEventProcessingOptions = serviceProvider.GetRequiredService<IOptions<SqlServerEventProcessingOptions>>().Value;
+                var dbConnection = serviceProvider.GetKeyedService<DbConnection>(sqlServerEventProcessingOptions.DbConnectionServiceKey);
 
                 if (dbConnection != null)
                 {
-                    var sqlConnectionStringBuilder = new SqlConnectionStringBuilder(sqlServerEventProcessingBuilder.Options.ConnectionString);
+                    var sqlConnectionStringBuilder = new SqlConnectionStringBuilder(sqlServerEventProcessingOptions.ConnectionString);
 
                     if (!dbConnection.Database.Equals(sqlConnectionStringBuilder.InitialCatalog, StringComparison.InvariantCultureIgnoreCase) ||
                         !dbConnection.DataSource.Equals(sqlConnectionStringBuilder.DataSource, StringComparison.InvariantCultureIgnoreCase))
@@ -65,20 +55,21 @@ public static class RecallBuilderExtensions
                         throw new ApplicationException(Resources.DbConnectionException);
                     }
 
-                    options.UseSqlServer(dbConnection, Configure);
+                    options.UseSqlServer(dbConnection, sqlServerOptions =>
+                    {
+                        sqlServerOptions.CommandTimeout((int)sqlServerEventProcessingOptions.CommandTimeout.TotalSeconds);
+                    });
                 }
                 else
                 {
-                    options.UseSqlServer(sqlServerEventProcessingBuilder.Options.ConnectionString, Configure);
+                    options.UseSqlServer(sqlServerEventProcessingOptions.ConnectionString, sqlServerOptions =>
+                    {
+                        sqlServerOptions.CommandTimeout((int)sqlServerEventProcessingOptions.CommandTimeout.TotalSeconds);
+                    });
                 }
             });
 
             return recallBuilder;
-
-            void Configure(SqlServerDbContextOptionsBuilder sqlServerOptions)
-            {
-                sqlServerOptions.CommandTimeout(sqlServerEventProcessingBuilder.Options.CommandTimeout.Seconds);
-            }
         }
     }
 }

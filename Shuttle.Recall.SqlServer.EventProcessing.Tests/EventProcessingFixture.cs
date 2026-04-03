@@ -17,38 +17,37 @@ public class EventProcessingFixture : RecallFixture
     [TestCase(false)]
     public async Task Should_be_able_to_process_events_async(bool isTransactional)
     {
+        await ExerciseEventProcessingAsync(GetRecallFixtureOptions().WithEventProcessingHandlerTimeout(TimeSpan.FromSeconds(15)), isTransactional);
+    }
+
+    private static RecallFixtureOptions GetRecallFixtureOptions()
+    {
         var configuration = new ConfigurationBuilder()
             .AddUserSecrets<EventProcessingFixture>()
             .Build();
 
         var services = new ServiceCollection()
-            .AddSingleton<IConfiguration>(configuration);
-
-        var fixtureOptions = new RecallFixtureOptions(services)
-            .WithAddRecall(recallBuilder =>
+            .AddSingleton<IConfiguration>(configuration)
+            .AddRecall(options =>
             {
-                recallBuilder.Configure(options =>
-                {
-                    options.EventStore.PrimitiveEventSequencerIdleDurations = [TimeSpan.FromMilliseconds(250)];
-                    options.EventProcessing.ProjectionProcessorIdleDurations = [TimeSpan.FromMilliseconds(250)];
-                });
-
-                recallBuilder
-                    .UseSqlServerEventStorage(builder =>
-                    {
-                        builder.Options.ConnectionString = configuration.GetConnectionString("StorageConnection") ?? throw new ApplicationException("A 'ConnectionString' with name 'StorageConnection' is required which points to a Sql Server database that will contain the event storage.");
-                        builder.Options.Schema = "recall_fixture";
-                    })
-                    .UseSqlServerEventProcessing(builder =>
-                    {
-                        builder.Options.ConnectionString = configuration.GetConnectionString("EventProcessingConnection") ?? throw new ApplicationException("A 'ConnectionString' with name 'EventProcessingConnection' is required which points to a Sql Server database that will contain the projections.");
-                        builder.Options.Schema = "recall_fixture";
-                    });
+                options.EventStore.PrimitiveEventSequencerIdleDurations = [TimeSpan.FromMilliseconds(250)];
+                options.EventProcessing.ProjectionProcessorIdleDurations = [TimeSpan.FromMilliseconds(250)];
             })
-            .WithStarting(StartingAsync)
-            .WithEventProcessingHandlerTimeout(TimeSpan.FromSeconds(15));
-
-        await ExerciseEventProcessingAsync(fixtureOptions, isTransactional);
+            .UseSqlServerEventStorage(options =>
+            {
+                options.ConnectionString = configuration.GetConnectionString("StorageConnection") ?? throw new ApplicationException("A 'ConnectionString' with name 'StorageConnection' is required which points to a Sql Server database that will contain the event storage.");
+                options.Schema = "recall_fixture";
+            })
+            .UseSqlServerEventProcessing(options =>
+            {
+                options.ConnectionString = configuration.GetConnectionString("EventProcessingConnection") ?? throw new ApplicationException("A 'ConnectionString' with name 'EventProcessingConnection' is required which points to a Sql Server database that will contain the projections.");
+                options.Schema = "recall_fixture";
+            })
+            .RegisterPrimitiveEventSequencing()
+            .Services; 
+        
+        return new RecallFixtureOptions(services)
+            .WithStarting(StartingAsync);
     }
 
     [Test]
@@ -56,37 +55,7 @@ public class EventProcessingFixture : RecallFixture
     [TestCase(false)]
     public async Task Should_be_able_to_process_events_with_delay_async(bool isTransactional)
     {
-        var configuration = new ConfigurationBuilder()
-            .AddUserSecrets<EventProcessingFixture>()
-            .Build();
-
-        var services = new ServiceCollection()
-            .AddSingleton<IConfiguration>(configuration);
-
-        var fixtureOptions = new RecallFixtureOptions(services)
-            .WithAddRecall(recallBuilder =>
-            {
-                recallBuilder.Configure(options =>
-                {
-                    options.EventStore.PrimitiveEventSequencerIdleDurations = [TimeSpan.FromMilliseconds(250)];
-                    options.EventProcessing.ProjectionProcessorIdleDurations = [TimeSpan.FromMilliseconds(250)];
-                });
-
-                recallBuilder
-                    .UseSqlServerEventStorage(builder =>
-                    {
-                        builder.Options.ConnectionString = configuration.GetConnectionString("StorageConnection") ?? throw new ApplicationException("A 'ConnectionString' with name 'StorageConnection' is required which points to a Sql Server database that will contain the event storage.");
-                        builder.Options.Schema = "recall_fixture";
-                    })
-                    .UseSqlServerEventProcessing(builder =>
-                    {
-                        builder.Options.ConnectionString = configuration.GetConnectionString("EventProcessingConnection") ?? throw new ApplicationException("A 'ConnectionString' with name 'EventProcessingConnection' is required which points to a Sql Server database that will contain the projections.");
-                        builder.Options.Schema = "recall_fixture";
-                    });
-            })
-            .WithStarting(StartingAsync);
-
-        await ExerciseEventProcessingWithDelayAsync(fixtureOptions, isTransactional);
+        await ExerciseEventProcessingWithDelayAsync(GetRecallFixtureOptions(), isTransactional);
     }
 
     [Test]
@@ -94,38 +63,7 @@ public class EventProcessingFixture : RecallFixture
     [TestCase(false)]
     public async Task Should_be_able_to_exercise_event_processing_with_deferred_handling_async(bool isTransactional)
     {
-        var configuration = new ConfigurationBuilder()
-            .AddUserSecrets<EventProcessingFixture>()
-            .Build();
-
-        var services = new ServiceCollection()
-            .AddSingleton<IConfiguration>(configuration);
-
-        var fixtureOptions = new RecallFixtureOptions(services)
-            .WithAddRecall(recallBuilder =>
-            {
-                recallBuilder.Configure(options =>
-                {
-                    options.EventStore.PrimitiveEventSequencerIdleDurations = [TimeSpan.FromMilliseconds(250)];
-                    options.EventProcessing.ProjectionProcessorIdleDurations = [TimeSpan.FromMilliseconds(250)];
-                });
-
-                recallBuilder
-                    .UseSqlServerEventStorage(builder =>
-                    {
-                        builder.Options.ConnectionString = configuration.GetConnectionString("StorageConnection") ?? throw new ApplicationException("A 'ConnectionString' with name 'StorageConnection' is required which points to a Sql Server database that will contain the event storage.");
-                        builder.Options.Schema = "recall_fixture";
-                    })
-                    .UseSqlServerEventProcessing(builder =>
-                    {
-                        builder.Options.ConnectionString = configuration.GetConnectionString("EventProcessingConnection") ?? throw new ApplicationException("A 'ConnectionString' with name 'EventProcessingConnection' is required which points to a Sql Server database that will contain the projections.");
-                        builder.Options.Schema = "recall_fixture";
-                    });
-            })
-            .WithStarting(StartingAsync)
-            .WithEventProcessingHandlerTimeout(TimeSpan.FromMinutes(5));
-
-        await ExerciseEventProcessingWithDeferredHandlingAsync(fixtureOptions, isTransactional);
+        await ExerciseEventProcessingWithDeferredHandlingAsync(GetRecallFixtureOptions().WithEventProcessingHandlerTimeout(TimeSpan.FromMinutes(5)), isTransactional);
     }
 
     [Test]
@@ -133,37 +71,7 @@ public class EventProcessingFixture : RecallFixture
     [TestCase(false)]
     public async Task Should_be_able_to_process_events_with_failure_async(bool isTransactional)
     {
-        var configuration = new ConfigurationBuilder()
-            .AddUserSecrets<EventProcessingFixture>()
-            .Build();
-
-        var services = new ServiceCollection()
-            .AddSingleton<IConfiguration>(configuration);
-
-        var fixtureOptions = new RecallFixtureOptions(services)
-            .WithAddRecall(recallBuilder =>
-            {
-                recallBuilder.Configure(options =>
-                {
-                    options.EventStore.PrimitiveEventSequencerIdleDurations = [TimeSpan.FromMilliseconds(250)];
-                    options.EventProcessing.ProjectionProcessorIdleDurations = [TimeSpan.FromMilliseconds(250)];
-                });
-
-                recallBuilder
-                    .UseSqlServerEventStorage(builder =>
-                    {
-                        builder.Options.ConnectionString = configuration.GetConnectionString("StorageConnection") ?? throw new ApplicationException("A 'ConnectionString' with name 'StorageConnection' is required which points to a Sql Server database that will contain the event storage.");
-                        builder.Options.Schema = "recall_fixture";
-                    })
-                    .UseSqlServerEventProcessing(builder =>
-                    {
-                        builder.Options.ConnectionString = configuration.GetConnectionString("EventProcessingConnection") ?? throw new ApplicationException("A 'ConnectionString' with name 'EventProcessingConnection' is required which points to a Sql Server database that will contain the projections.");
-                        builder.Options.Schema = "recall_fixture";
-                    });
-            })
-            .WithStarting(StartingAsync);
-
-        await ExerciseEventProcessingWithFailureAsync(fixtureOptions, isTransactional);
+        await ExerciseEventProcessingWithFailureAsync(GetRecallFixtureOptions(), isTransactional);
     }
 
     [Test]
@@ -171,39 +79,7 @@ public class EventProcessingFixture : RecallFixture
     [TestCase(false)]
     public async Task Should_be_able_to_process_volume_events_async(bool isTransactional)
     {
-        var configuration = new ConfigurationBuilder()
-            .AddUserSecrets<EventProcessingFixture>()
-            .Build();
-
-        var services = new ServiceCollection()
-            .AddSingleton<IConfiguration>(configuration);
-
-        var fixtureOptions = new RecallFixtureOptions(services)
-            .WithStarting(StartingAsync)
-            .WithAddRecall(recallBuilder =>
-            {
-                recallBuilder.Configure(options =>
-                {
-                    options.EventStore.PrimitiveEventSequencerIdleDurations = [TimeSpan.FromMilliseconds(250)];
-                    options.EventProcessing.ProjectionProcessorIdleDurations = [TimeSpan.FromMilliseconds(250)];
-                    options.EventProcessing.ProjectionThreadCount = 5;
-                });
-
-                recallBuilder
-                    .UseSqlServerEventStorage(builder =>
-                    {
-                        builder.Options.ConnectionString = configuration.GetConnectionString("StorageConnection") ?? throw new ApplicationException("A 'ConnectionString' with name 'StorageConnection' is required which points to a Sql Server database that will contain the event storage.");
-                        builder.Options.Schema = "recall_fixture";
-                    })
-                    .UseSqlServerEventProcessing(builder =>
-                    {
-                        builder.Options.ConnectionString = configuration.GetConnectionString("EventProcessingConnection") ?? throw new ApplicationException("A 'ConnectionString' with name 'EventProcessingConnection' is required which points to a Sql Server database that will contain the projections.");
-                        builder.Options.Schema = "recall_fixture";
-                    });
-            })
-            .WithEventProcessingHandlerTimeout(TimeSpan.FromMinutes(2));
-
-        await ExerciseEventProcessingVolumeAsync(fixtureOptions, isTransactional);
+        await ExerciseEventProcessingVolumeAsync(GetRecallFixtureOptions().WithEventProcessingHandlerTimeout(TimeSpan.FromMinutes(2)), isTransactional);
     }
 
     private static async Task StartingAsync(IServiceProvider serviceProvider)
