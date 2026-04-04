@@ -1,12 +1,9 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Hosting;
-using Microsoft.Extensions.Options;
 using Serilog;
 using Serilog.Events;
 using Shuttle.Core.Cli;
-using Shuttle.Recall;
-using Shuttle.Recall.SqlServer.EventProcessing;
+using Shuttle.Recall.SqlServer.Storage;
 
 namespace Shuttle.Recall.SqlServer.EventProcessing.Database;
 
@@ -65,7 +62,7 @@ internal class Program
                     return Task.CompletedTask;
                 };
             })
-            .Configure<SqlServerEventProcessingOptions>(options =>
+            .Configure<SqlServerStorageOptions>(options =>
             {
                 options.ConnectionString = args.Get<string>("connection-string");
                 options.Schema = args.Get<string>("schema", "dbo");

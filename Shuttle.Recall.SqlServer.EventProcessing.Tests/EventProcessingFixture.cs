@@ -38,11 +38,7 @@ public class EventProcessingFixture : RecallFixture
                 options.ConnectionString = configuration.GetConnectionString("StorageConnection") ?? throw new ApplicationException("A 'ConnectionString' with name 'StorageConnection' is required which points to a Sql Server database that will contain the event storage.");
                 options.Schema = "recall_fixture";
             })
-            .UseSqlServerEventProcessing(options =>
-            {
-                options.ConnectionString = configuration.GetConnectionString("EventProcessingConnection") ?? throw new ApplicationException("A 'ConnectionString' with name 'EventProcessingConnection' is required which points to a Sql Server database that will contain the projections.");
-                options.Schema = "recall_fixture";
-            })
+            .UseSqlServerEventProcessing()
             .RegisterPrimitiveEventSequencing()
             .Services; 
         
@@ -87,7 +83,6 @@ public class EventProcessingFixture : RecallFixture
         using var scope = serviceProvider.GetRequiredService<IServiceScopeFactory>().CreateScope();
 
         var sqlServerStorageOptions = serviceProvider.GetRequiredService<IOptions<SqlServerStorageOptions>>().Value;
-        var sqlEventProcessingOptions = serviceProvider.GetRequiredService<IOptions<SqlServerEventProcessingOptions>>().Value;
 
         await using (var dbContext = scope.ServiceProvider.GetRequiredService<SqlServerStorageDbContext>())
         {
@@ -108,14 +103,14 @@ END
         await using (var dbContext = scope.ServiceProvider.GetRequiredService<SqlServerEventProcessingDbContext>())
         {
             await dbContext.Database.ExecuteSqlRawAsync(@$"
-IF EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'[{sqlEventProcessingOptions.Schema}].[Projection]') AND type in (N'U'))
+IF EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'[{sqlServerStorageOptions.Schema}].[Projection]') AND type in (N'U'))
 BEGIN
-    DELETE FROM [{sqlEventProcessingOptions.Schema}].[Projection] WHERE [Name] like 'recall-fixture%'
+    DELETE FROM [{sqlServerStorageOptions.Schema}].[Projection] WHERE [Name] like 'recall-fixture%'
 END
 
-IF EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'[{sqlEventProcessingOptions.Schema}].[ProjectionJournal]') AND type in (N'U'))
+IF EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'[{sqlServerStorageOptions.Schema}].[ProjectionJournal]') AND type in (N'U'))
 BEGIN
-    DELETE FROM [{sqlEventProcessingOptions.Schema}].[ProjectionJournal] WHERE [Name] like 'recall-fixture%'
+    DELETE FROM [{sqlServerStorageOptions.Schema}].[ProjectionJournal] WHERE [Name] like 'recall-fixture%'
 END
 ");
         }

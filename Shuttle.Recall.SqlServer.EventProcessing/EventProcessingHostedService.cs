@@ -5,48 +5,49 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
-using Shuttle.Core.Contract;
 using Shuttle.Core.Reflection;
+using Shuttle.Recall.SqlServer.Storage;
 
 namespace Shuttle.Recall.SqlServer.EventProcessing;
 
 [SuppressMessage("Security", "EF1002:Risk of vulnerability to SQL injection", Justification = "Schema and table names are from trusted configuration sources")]
-public class EventProcessingHostedService(IOptions<RecallOptions> recallOptions, IOptions<SqlServerEventProcessingOptions> sqlEventProcessingOptions, IServiceScopeFactory serviceScopeFactory, IEventProcessorConfiguration eventProcessorConfiguration)
+public class EventProcessingHostedService(IOptions<RecallOptions> recallOptions, IOptions<SqlServerStorageOptions> sqlServerStorageOptions, IServiceScopeFactory serviceScopeFactory, IEventProcessorConfiguration eventProcessorConfiguration)
     : IHostedService
 {
-    private readonly IEventProcessorConfiguration _eventProcessorConfiguration = Guard.AgainstNull(eventProcessorConfiguration);
-    private readonly RecallOptions _recallOptions = Guard.AgainstNull(Guard.AgainstNull(recallOptions).Value);
-    private readonly IServiceScopeFactory _serviceScopeFactory = Guard.AgainstNull(serviceScopeFactory);
-    private readonly SqlServerEventProcessingOptions _sqlServerEventProcessingOptions = Guard.AgainstNull(Guard.AgainstNull(sqlEventProcessingOptions).Value);
-
     public async Task StartAsync(CancellationToken cancellationToken)
     {
-        using var scope = _serviceScopeFactory.CreateScope();
+        ArgumentNullException.ThrowIfNull(recallOptions);
+        ArgumentNullException.ThrowIfNull(sqlServerStorageOptions);
+        ArgumentNullException.ThrowIfNull(eventProcessorConfiguration);
+        ArgumentNullException.ThrowIfNull(serviceScopeFactory);
 
+        var schema = sqlServerStorageOptions.Value.Schema;
+
+        using var scope = serviceScopeFactory.CreateScope();
         await using var dbContext = scope.ServiceProvider.GetRequiredService<SqlServerEventProcessingDbContext>();
         
-        if (_sqlServerEventProcessingOptions.ConfigureDatabase)
+        if (sqlServerStorageOptions.Value.ConfigureDatabase)
         {
             var retry = true;
             var retryCount = 0;
 
             while (retry)
             {
-                await _recallOptions.Operation.InvokeAsync(new($"[EventProcessingHostedService.ConfigureDatabase/Starting] : retry count = {retryCount}"), cancellationToken);
+                await recallOptions.Value.Operation.InvokeAsync(new($"[EventProcessingHostedService.ConfigureDatabase/Starting] : retry count = {retryCount}"), cancellationToken);
 
                 try
                 {
                     await dbContext.Database.ExecuteSqlRawAsync($@"
 EXEC sp_getapplock @Resource = '{typeof(EventProcessingHostedService).FullName}', @LockMode = 'Exclusive', @LockOwner = 'Session', @LockTimeout = 15000;
 
-IF NOT EXISTS (SELECT 1 FROM sys.schemas WHERE name = '{_sqlServerEventProcessingOptions.Schema}')
+IF NOT EXISTS (SELECT 1 FROM sys.schemas WHERE name = '{schema}')
 BEGIN
-    EXEC('CREATE SCHEMA {_sqlServerEventProcessingOptions.Schema}');
+    EXEC('CREATE SCHEMA {schema}');
 END
 
-IF NOT EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'[{_sqlServerEventProcessingOptions.Schema}].[Projection]') AND type in (N'U'))
+IF NOT EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'[{schema}].[Projection]') AND type in (N'U'))
 BEGIN
-    CREATE TABLE [{_sqlServerEventProcessingOptions.Schema}].[Projection]
+    CREATE TABLE [{schema}].[Projection]
     (
 	    [Name] [nvarchar](650) NOT NULL,
 	    [SequenceNumber] [bigint] NOT NULL,
@@ -61,43 +62,43 @@ BEGIN
     ) ON [PRIMARY]
 END
 
-IF COL_LENGTH('[{_sqlServerEventProcessingOptions.Schema}].[Projection]', 'LockedAt') IS NULL
+IF COL_LENGTH('[{schema}].[Projection]', 'LockedAt') IS NULL
 BEGIN
-    ALTER TABLE [{_sqlServerEventProcessingOptions.Schema}].[Projection]
+    ALTER TABLE [{schema}].[Projection]
     ADD [LockedAt] DATETIMEOFFSET(7) NULL;
 END
 
-IF COL_LENGTH('[{_sqlServerEventProcessingOptions.Schema}].[Projection]', 'DeferredUntil') IS NULL
+IF COL_LENGTH('[{schema}].[Projection]', 'DeferredUntil') IS NULL
 BEGIN
-    ALTER TABLE [{_sqlServerEventProcessingOptions.Schema}].[Projection]
+    ALTER TABLE [{schema}].[Projection]
     ADD [DeferredUntil] DATETIMEOFFSET(7) NULL;
 END
 
-IF NOT EXISTS (SELECT * FROM sys.indexes WHERE name = N'IX_Projection_SequenceNumber_Name' AND object_id = OBJECT_ID(N'[{_sqlServerEventProcessingOptions.Schema}].[Projection]'))
+IF NOT EXISTS (SELECT * FROM sys.indexes WHERE name = N'IX_Projection_SequenceNumber_Name' AND object_id = OBJECT_ID(N'[{schema}].[Projection]'))
 BEGIN
     CREATE NONCLUSTERED INDEX [IX_Projection_SequenceNumber_Name] 
-    ON [{_sqlServerEventProcessingOptions.Schema}].[Projection] 
+    ON [{schema}].[Projection] 
     (
         [SequenceNumber] ASC, 
         [Name] ASC
     );
 END
 
-IF EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'[{_sqlServerEventProcessingOptions.Schema}].[ProjectionJournal]') AND type in (N'U'))
+IF EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'[{schema}].[ProjectionJournal]') AND type in (N'U'))
 BEGIN
-    DROP TABLE [{_sqlServerEventProcessingOptions.Schema}].[ProjectionJournal];
+    DROP TABLE [{schema}].[ProjectionJournal];
 END
 
 EXEC sp_releaseapplock @Resource = '{typeof(EventProcessingHostedService).FullName}', @LockOwner = 'Session';
 ", cancellationToken);
 
-                    await _recallOptions.Operation.InvokeAsync(new($"[EventProcessingHostedService.ConfigureDatabase/Completed] : retry count = {retryCount}"), cancellationToken);
+                    await recallOptions.Value.Operation.InvokeAsync(new($"[EventProcessingHostedService.ConfigureDatabase/Completed] : retry count = {retryCount}"), cancellationToken);
 
                     retry = false;
                 }
                 catch (Exception ex)
                 {
-                    await _recallOptions.Operation.InvokeAsync(new($"[EventProcessingHostedService.ConfigureDatabase/Failed] : exception = {ex.AllMessages()}"), cancellationToken);
+                    await recallOptions.Value.Operation.InvokeAsync(new($"[EventProcessingHostedService.ConfigureDatabase/Failed] : exception = {ex.AllMessages()}"), cancellationToken);
 
                     retryCount++;
 
@@ -110,21 +111,21 @@ EXEC sp_releaseapplock @Resource = '{typeof(EventProcessingHostedService).FullNa
         }
         else
         {
-            await _recallOptions.Operation.InvokeAsync(new("[EventProcessingHostedService.ConfigureDatabase/Disabled]"), cancellationToken);
+            await recallOptions.Value.Operation.InvokeAsync(new("[EventProcessingHostedService.ConfigureDatabase/Disabled]"), cancellationToken);
         }
 
-        await _recallOptions.Operation.InvokeAsync(new($"[EventProcessingHostedService.Projections] : count = {_eventProcessorConfiguration.Projections.Count()}"), cancellationToken);
+        await recallOptions.Value.Operation.InvokeAsync(new($"[EventProcessingHostedService.Projections] : count = {eventProcessorConfiguration.Projections.Count()}"), cancellationToken);
 
-        foreach (var projectionConfiguration in _eventProcessorConfiguration.Projections)
+        foreach (var projectionConfiguration in eventProcessorConfiguration.Projections)
         {
             var connection = dbContext.Database.GetDbConnection();
 
             await using var command = connection.CreateCommand();
 
             command.CommandText = $@"
-IF NOT EXISTS (SELECT NULL FROM [{_sqlServerEventProcessingOptions.Schema}].[Projection] WHERE [Name] = @Name)
+IF NOT EXISTS (SELECT NULL FROM [{schema}].[Projection] WHERE [Name] = @Name)
 BEGIN
-    INSERT INTO [{_sqlServerEventProcessingOptions.Schema}].[Projection] 
+    INSERT INTO [{schema}].[Projection] 
     (
         [Name], 
         [SequenceNumber]
@@ -146,7 +147,7 @@ END
 
             await command.ExecuteNonQueryAsync(cancellationToken);
 
-            await _recallOptions.Operation.InvokeAsync(new($"[EventProcessingHostedService.Projections/Configured] : name = {projectionConfiguration.Name} / event type count = {projectionConfiguration.EventTypes.Count()}"), cancellationToken);
+            await recallOptions.Value.Operation.InvokeAsync(new($"[EventProcessingHostedService.Projections/Configured] : name = {projectionConfiguration.Name} / event type count = {projectionConfiguration.EventTypes.Count()}"), cancellationToken);
         }
     }
 

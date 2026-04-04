@@ -4,16 +4,17 @@ using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.Extensions.Options;
 using Shuttle.Core.Contract;
 using System.Data;
+using Shuttle.Recall.SqlServer.Storage;
 
 namespace Shuttle.Recall.SqlServer.EventProcessing;
 
-public class ProjectionQuery(IOptions<RecallOptions> recallOptions, IOptions<SqlServerEventProcessingOptions> sqlServerEventProcessingOptions, SqlServerEventProcessingDbContext dbContext)
+public class ProjectionQuery(IOptions<RecallOptions> recallOptions, IOptions<SqlServerStorageOptions> sqlServerStorageOptions, IOptions<SqlServerEventProcessingOptions> sqlServerEventProcessingOptions, SqlServerEventProcessingDbContext dbContext)
     : IProjectionQuery
 {
     private static readonly string ResourceName = typeof(ProjectionQuery).FullName ?? nameof(ProjectionQuery);
 
     private readonly RecallOptions _recallOptions = Guard.AgainstNull(Guard.AgainstNull(recallOptions).Value);
-    private readonly SqlServerEventProcessingOptions _sqlServerEventProcessingOptions = Guard.AgainstNull(Guard.AgainstNull(sqlServerEventProcessingOptions).Value);
+    private readonly SqlServerStorageOptions _sqlServerStorageOptions = Guard.AgainstNull(Guard.AgainstNull(sqlServerStorageOptions).Value);
     private readonly SqlServerEventProcessingDbContext _dbContext = Guard.AgainstNull(dbContext);
 
     public async ValueTask<Projection?> GetAsync(CancellationToken cancellationToken = default)
@@ -41,7 +42,7 @@ DECLARE @Now DATETIMEOFFSET = SYSDATETIMEOFFSET();
         p.[LockedAt],
         p.[DeferredUntil]
     FROM 
-        [{_sqlServerEventProcessingOptions.Schema}].[Projection] p WITH (UPDLOCK, READPAST, ROWLOCK)
+        [{_sqlServerStorageOptions.Schema}].[Projection] p WITH (UPDLOCK, READPAST, ROWLOCK)
     WHERE
         {(_recallOptions.EventProcessing.IncludedProjections.Count > 0
             ? $"p.[Name] IN ({string.Join(',', _recallOptions.EventProcessing.IncludedProjections.Select(item => $"'{item}'"))}) AND"
@@ -78,7 +79,7 @@ OUTPUT
 EXEC sp_releaseapplock @Resource = '{ResourceName}', @LockOwner = 'Session';
 ";
 
-        command.Parameters.Add(new SqlParameter("@LockedAtTimeout", DateTimeOffset.UtcNow.Subtract(_sqlServerEventProcessingOptions.ProjectionLockTimeout)));
+        command.Parameters.Add(new SqlParameter("@LockedAtTimeout", DateTimeOffset.UtcNow.Subtract(sqlServerEventProcessingOptions.Value.ProjectionLockTimeout)));
 
         if (connection.State != ConnectionState.Open)
         {
@@ -89,7 +90,7 @@ EXEC sp_releaseapplock @Resource = '{ResourceName}', @LockOwner = 'Session';
 
         if (!await reader.ReadAsync(cancellationToken))
         {
-            await _recallOptions.Operation.InvokeAsync(new($"[ProjectionQuery.Get/Completed] : projection = <null>"), cancellationToken);
+            await _recallOptions.Operation.InvokeAsync(new("[ProjectionQuery.Get/Completed] : projection = <null>"), cancellationToken);
 
             return null;
         }
@@ -113,7 +114,7 @@ IF EXISTS
     SELECT
         NULL
     FROM
-        [{_sqlServerEventProcessingOptions.Schema}].Projection
+        [{_sqlServerStorageOptions.Schema}].Projection
     WHERE
         SequenceNumber < @SequenceNumber
 )

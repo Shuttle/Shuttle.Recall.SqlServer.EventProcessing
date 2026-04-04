@@ -5,6 +5,7 @@ using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
 using System.Data.Common;
+using Shuttle.Recall.SqlServer.Storage;
 
 namespace Shuttle.Recall.SqlServer.EventProcessing;
 
@@ -12,11 +13,10 @@ public static class RecallBuilderExtensions
 {
     extension(RecallBuilder recallBuilder)
     {
-        public RecallBuilder UseSqlServerEventProcessing(Action<SqlServerEventProcessingOptions>? configureOptions)
+        public RecallBuilder UseSqlServerEventProcessing(Action<SqlServerEventProcessingOptions>? configureOptions = null)
         {
             var services = recallBuilder.Services;
 
-            services.AddSingleton<IValidateOptions<SqlServerEventProcessingOptions>, SqlServerEventProcessingOptionsValidator>();
             services.AddScoped<IProjectionQuery, ProjectionQuery>();
             services.AddScoped<IProjectionRepository, ProjectionRepository>();
             services.AddScoped<IProjectionEventService, SequentialProjectionEventService>();
@@ -41,12 +41,12 @@ public static class RecallBuilderExtensions
 
             services.AddDbContext<SqlServerEventProcessingDbContext>((serviceProvider, options) =>
             {
-                var sqlServerEventProcessingOptions = serviceProvider.GetRequiredService<IOptions<SqlServerEventProcessingOptions>>().Value;
-                var dbConnection = serviceProvider.GetKeyedService<DbConnection>(sqlServerEventProcessingOptions.DbConnectionServiceKey);
+                var sqlServerStorageOptions = serviceProvider.GetRequiredService<IOptions<SqlServerStorageOptions>>().Value;
+                var dbConnection = serviceProvider.GetKeyedService<DbConnection>(sqlServerStorageOptions.DbConnectionServiceKey);
 
                 if (dbConnection != null)
                 {
-                    var sqlConnectionStringBuilder = new SqlConnectionStringBuilder(sqlServerEventProcessingOptions.ConnectionString);
+                    var sqlConnectionStringBuilder = new SqlConnectionStringBuilder(sqlServerStorageOptions.ConnectionString);
 
                     if (!dbConnection.Database.Equals(sqlConnectionStringBuilder.InitialCatalog, StringComparison.InvariantCultureIgnoreCase) ||
                         !dbConnection.DataSource.Equals(sqlConnectionStringBuilder.DataSource, StringComparison.InvariantCultureIgnoreCase))
@@ -56,14 +56,14 @@ public static class RecallBuilderExtensions
 
                     options.UseSqlServer(dbConnection, sqlServerOptions =>
                     {
-                        sqlServerOptions.CommandTimeout((int)sqlServerEventProcessingOptions.CommandTimeout.TotalSeconds);
+                        sqlServerOptions.CommandTimeout((int)sqlServerStorageOptions.CommandTimeout.TotalSeconds);
                     });
                 }
                 else
                 {
-                    options.UseSqlServer(sqlServerEventProcessingOptions.ConnectionString, sqlServerOptions =>
+                    options.UseSqlServer(sqlServerStorageOptions.ConnectionString, sqlServerOptions =>
                     {
-                        sqlServerOptions.CommandTimeout((int)sqlServerEventProcessingOptions.CommandTimeout.TotalSeconds);
+                        sqlServerOptions.CommandTimeout((int)sqlServerStorageOptions.CommandTimeout.TotalSeconds);
                     });
                 }
             });
