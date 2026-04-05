@@ -1,5 +1,4 @@
-﻿using System.Transactions;
-using Microsoft.EntityFrameworkCore;
+﻿using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.Extensions.Options;
 using Shuttle.Core.Contract;
@@ -41,11 +40,8 @@ public class SequentialProjectionEventService(IOptions<RecallOptions> recallOpti
     {
         await _recallOptions.Operation.InvokeAsync(new("[SequentialProjectionService.Retrieve/Starting]"), cancellationToken);
         
-        if (Transaction.Current == null)
-        {
-            _transaction = await _sqlServerEventProcessingDbContext.Database.BeginTransactionAsync(cancellationToken);
-            await _sqlServerStorageDbContext.Database.UseTransactionAsync(_transaction.GetDbTransaction(), cancellationToken);
-        }
+        _transaction = await _sqlServerEventProcessingDbContext.Database.BeginTransactionAsync(cancellationToken);
+        await _sqlServerStorageDbContext.Database.UseTransactionAsync(_transaction.GetDbTransaction(), cancellationToken);
 
         var projection = await _projectionQuery.GetAsync(cancellationToken);
 
@@ -80,10 +76,6 @@ public class SequentialProjectionEventService(IOptions<RecallOptions> recallOpti
         {
             await _transaction.CommitAsync(CancellationToken.None);
             await _transaction.DisposeAsync();
-        }
-        else
-        {
-            pipelineContext.Pipeline.TransactionScope?.Complete();
         }
     }
 

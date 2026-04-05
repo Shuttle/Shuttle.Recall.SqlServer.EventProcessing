@@ -43,43 +43,33 @@ public class EventProcessingFixture : RecallFixture
     }
 
     [Test]
-    [TestCase(true)]
-    [TestCase(false)]
-    public async Task Should_be_able_to_exercise_event_processing_with_deferred_handling_async(bool isTransactional)
+    public async Task Should_be_able_to_exercise_event_processing_with_deferred_handling_async()
     {
-        await ExerciseEventProcessingWithDeferredHandlingAsync(GetRecallFixtureOptions().WithEventProcessingHandlerTimeout(TimeSpan.FromMinutes(5)), isTransactional);
+        await ExerciseEventProcessingWithDeferredHandlingAsync(GetRecallFixtureOptions().WithEventProcessingHandlerTimeout(TimeSpan.FromMinutes(5)));
     }
 
     [Test]
-    [TestCase(true)]
-    [TestCase(false)]
-    public async Task Should_be_able_to_process_events_async(bool isTransactional)
+    public async Task Should_be_able_to_process_events_async()
     {
-        await ExerciseEventProcessingAsync(GetRecallFixtureOptions().WithEventProcessingHandlerTimeout(TimeSpan.FromSeconds(1500)), isTransactional);
+        await ExerciseEventProcessingAsync(GetRecallFixtureOptions().WithEventProcessingHandlerTimeout(TimeSpan.FromSeconds(1500)));
     }
 
     [Test]
-    [TestCase(true)]
-    [TestCase(false)]
-    public async Task Should_be_able_to_process_events_with_delay_async(bool isTransactional)
+    public async Task Should_be_able_to_process_events_with_delay_async()
     {
-        await ExerciseEventProcessingWithDelayAsync(GetRecallFixtureOptions(), isTransactional);
+        await ExerciseEventProcessingWithDelayAsync(GetRecallFixtureOptions());
     }
 
     [Test]
-    [TestCase(true)]
-    [TestCase(false)]
-    public async Task Should_be_able_to_process_events_with_failure_async(bool isTransactional)
+    public async Task Should_be_able_to_process_events_with_failure_async()
     {
-        await ExerciseEventProcessingWithFailureAsync(GetRecallFixtureOptions(), isTransactional);
+        await ExerciseEventProcessingWithFailureAsync(GetRecallFixtureOptions());
     }
 
     [Test]
-    [TestCase(true)]
-    [TestCase(false)]
-    public async Task Should_be_able_to_process_volume_events_async(bool isTransactional)
+    public async Task Should_be_able_to_process_volume_events_async()
     {
-        await ExerciseEventProcessingVolumeAsync(GetRecallFixtureOptions().WithEventProcessingHandlerTimeout(TimeSpan.FromMinutes(2)), isTransactional);
+        await ExerciseEventProcessingVolumeAsync(GetRecallFixtureOptions().WithEventProcessingHandlerTimeout(TimeSpan.FromMinutes(2)));
     }
 
     private static async Task StartingAsync(IServiceProvider serviceProvider)
