@@ -1,10 +1,9 @@
-﻿using Microsoft.Data.SqlClient;
+﻿using System.Data.Common;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
-using System.Data.Common;
 using Shuttle.Recall.SqlServer.Storage;
 
 namespace Shuttle.Recall.SqlServer.EventProcessing;
@@ -42,30 +41,12 @@ public static class RecallBuilderExtensions
             services.AddDbContext<SqlServerEventProcessingDbContext>((serviceProvider, options) =>
             {
                 var sqlServerStorageOptions = serviceProvider.GetRequiredService<IOptions<SqlServerStorageOptions>>().Value;
-                var dbConnection = serviceProvider.GetKeyedService<DbConnection>(sqlServerStorageOptions.DbConnectionServiceKey);
+                var dbConnection = serviceProvider.GetRequiredKeyedService<DbConnection>(sqlServerStorageOptions.DbConnectionServiceKey);
 
-                if (dbConnection != null)
+                options.UseSqlServer(dbConnection, sqlServerOptions =>
                 {
-                    var sqlConnectionStringBuilder = new SqlConnectionStringBuilder(sqlServerStorageOptions.ConnectionString);
-
-                    if (!dbConnection.Database.Equals(sqlConnectionStringBuilder.InitialCatalog, StringComparison.InvariantCultureIgnoreCase) ||
-                        !dbConnection.DataSource.Equals(sqlConnectionStringBuilder.DataSource, StringComparison.InvariantCultureIgnoreCase))
-                    {
-                        throw new ApplicationException(Resources.DbConnectionException);
-                    }
-
-                    options.UseSqlServer(dbConnection, sqlServerOptions =>
-                    {
-                        sqlServerOptions.CommandTimeout((int)sqlServerStorageOptions.CommandTimeout.TotalSeconds);
-                    });
-                }
-                else
-                {
-                    options.UseSqlServer(sqlServerStorageOptions.ConnectionString, sqlServerOptions =>
-                    {
-                        sqlServerOptions.CommandTimeout((int)sqlServerStorageOptions.CommandTimeout.TotalSeconds);
-                    });
-                }
+                    sqlServerOptions.CommandTimeout((int)sqlServerStorageOptions.CommandTimeout.TotalSeconds);
+                });
             });
 
             return recallBuilder;

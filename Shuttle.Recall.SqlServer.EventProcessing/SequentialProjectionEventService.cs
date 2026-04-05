@@ -1,4 +1,5 @@
 ﻿using System.Transactions;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.Extensions.Options;
 using Shuttle.Core.Contract;
@@ -7,11 +8,12 @@ using Shuttle.Recall.SqlServer.Storage;
 
 namespace Shuttle.Recall.SqlServer.EventProcessing;
 
-public class SequentialProjectionEventService(IOptions<RecallOptions> recallOptions, ISequentialProjectionEventServiceContext sequentialProjectionEventServiceContext, SqlServerEventProcessingDbContext dbContext, IProjectionRepository projectionRepository, IProjectionQuery projectionQuery, IPrimitiveEventQuery primitiveEventQuery)
+public class SequentialProjectionEventService(IOptions<RecallOptions> recallOptions, ISequentialProjectionEventServiceContext sequentialProjectionEventServiceContext, SqlServerStorageDbContext sqlServerStorageDbContext, SqlServerEventProcessingDbContext sqlServerEventProcessingDbContext, IProjectionRepository projectionRepository, IProjectionQuery projectionQuery, IPrimitiveEventQuery primitiveEventQuery)
     : IProjectionEventService
 {
     private readonly RecallOptions _recallOptions = Guard.AgainstNull(Guard.AgainstNull(recallOptions).Value);
-    private readonly SqlServerEventProcessingDbContext _dbContext = Guard.AgainstNull(dbContext);
+    private readonly SqlServerStorageDbContext _sqlServerStorageDbContext = Guard.AgainstNull(sqlServerStorageDbContext);
+    private readonly SqlServerEventProcessingDbContext _sqlServerEventProcessingDbContext = Guard.AgainstNull(sqlServerEventProcessingDbContext);
     private readonly IPrimitiveEventQuery _primitiveEventQuery = Guard.AgainstNull(primitiveEventQuery);
     private readonly IProjectionQuery _projectionQuery = Guard.AgainstNull(projectionQuery);
     private readonly IProjectionRepository _projectionRepository = Guard.AgainstNull(projectionRepository);
@@ -41,7 +43,8 @@ public class SequentialProjectionEventService(IOptions<RecallOptions> recallOpti
         
         if (Transaction.Current == null)
         {
-            _transaction = await _dbContext.Database.BeginTransactionAsync(cancellationToken);
+            _transaction = await _sqlServerEventProcessingDbContext.Database.BeginTransactionAsync(cancellationToken);
+            await _sqlServerStorageDbContext.Database.UseTransactionAsync(_transaction.GetDbTransaction(), cancellationToken);
         }
 
         var projection = await _projectionQuery.GetAsync(cancellationToken);

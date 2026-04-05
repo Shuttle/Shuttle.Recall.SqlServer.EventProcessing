@@ -8,5 +8,4 @@ public class SqlServerEventProcessingOptions
     public int MaximumCacheSize { get; set; } = 1000;
     public TimeSpan CacheDuration { get; set; } = TimeSpan.FromMinutes(1);
     public TimeSpan ProjectionLockTimeout { get; set; } = TimeSpan.FromSeconds(30);
-    public string DbConnectionServiceKey { get; set; } = "SqlServerEventProcessingDbConnection";
 }

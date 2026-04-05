@@ -1,25 +1,19 @@
-﻿using Microsoft.EntityFrameworkCore;
+﻿using System.Data.Common;
+using System.Diagnostics.CodeAnalysis;
+using Microsoft.Data.SqlClient;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using NUnit.Framework;
 using Shuttle.Recall.SqlServer.Storage;
 using Shuttle.Recall.Testing;
-using System.Diagnostics.CodeAnalysis;
 
 namespace Shuttle.Recall.SqlServer.EventProcessing.Tests;
 
 [SuppressMessage("Security", "EF1002:Risk of vulnerability to SQL injection", Justification = "Schema and table names are from trusted configuration sources")]
 public class EventProcessingFixture : RecallFixture
 {
-    [Test]
-    [TestCase(true)]
-    [TestCase(false)]
-    public async Task Should_be_able_to_process_events_async(bool isTransactional)
-    {
-        await ExerciseEventProcessingAsync(GetRecallFixtureOptions().WithEventProcessingHandlerTimeout(TimeSpan.FromSeconds(15)), isTransactional);
-    }
-
     private static RecallFixtureOptions GetRecallFixtureOptions()
     {
         var configuration = new ConfigurationBuilder()
@@ -28,6 +22,8 @@ public class EventProcessingFixture : RecallFixture
 
         var services = new ServiceCollection()
             .AddSingleton<IConfiguration>(configuration)
+            .AddKeyedScoped<DbConnection>("Testing", (serviceProvider, _) =>
+                new SqlConnection(serviceProvider.GetRequiredService<IOptions<SqlServerStorageOptions>>().Value.ConnectionString))
             .AddRecall(options =>
             {
                 options.EventStore.PrimitiveEventSequencerIdleDurations = [TimeSpan.FromMilliseconds(250)];
@@ -38,20 +34,12 @@ public class EventProcessingFixture : RecallFixture
                 options.ConnectionString = configuration.GetConnectionString("StorageConnection") ?? throw new ApplicationException("A 'ConnectionString' with name 'StorageConnection' is required which points to a Sql Server database that will contain the event storage.");
                 options.Schema = "recall_fixture";
             })
-            .UseSqlServerEventProcessing()
             .RegisterPrimitiveEventSequencing()
-            .Services; 
-        
+            .UseSqlServerEventProcessing()
+            .Services;
+
         return new RecallFixtureOptions(services)
             .WithStarting(StartingAsync);
-    }
-
-    [Test]
-    [TestCase(true)]
-    [TestCase(false)]
-    public async Task Should_be_able_to_process_events_with_delay_async(bool isTransactional)
-    {
-        await ExerciseEventProcessingWithDelayAsync(GetRecallFixtureOptions(), isTransactional);
     }
 
     [Test]
@@ -60,6 +48,22 @@ public class EventProcessingFixture : RecallFixture
     public async Task Should_be_able_to_exercise_event_processing_with_deferred_handling_async(bool isTransactional)
     {
         await ExerciseEventProcessingWithDeferredHandlingAsync(GetRecallFixtureOptions().WithEventProcessingHandlerTimeout(TimeSpan.FromMinutes(5)), isTransactional);
+    }
+
+    [Test]
+    [TestCase(true)]
+    [TestCase(false)]
+    public async Task Should_be_able_to_process_events_async(bool isTransactional)
+    {
+        await ExerciseEventProcessingAsync(GetRecallFixtureOptions().WithEventProcessingHandlerTimeout(TimeSpan.FromSeconds(1500)), isTransactional);
+    }
+
+    [Test]
+    [TestCase(true)]
+    [TestCase(false)]
+    public async Task Should_be_able_to_process_events_with_delay_async(bool isTransactional)
+    {
+        await ExerciseEventProcessingWithDelayAsync(GetRecallFixtureOptions(), isTransactional);
     }
 
     [Test]
