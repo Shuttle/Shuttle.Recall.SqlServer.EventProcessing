@@ -78,9 +78,10 @@ public class EventProcessingFixture : RecallFixture
 
         var sqlServerStorageOptions = serviceProvider.GetRequiredService<IOptions<SqlServerStorageOptions>>().Value;
 
-        await using (var dbContext = scope.ServiceProvider.GetRequiredService<SqlServerStorageDbContext>())
+        await using (var sqlServerStorageDbContext = scope.ServiceProvider.GetRequiredService<SqlServerStorageDbContext>())
+        await using (var sqlServerEventProcessingDbContext = scope.ServiceProvider.GetRequiredService<SqlServerEventProcessingDbContext>())
         {
-            await dbContext.Database.ExecuteSqlRawAsync(@$"
+            await sqlServerStorageDbContext.Database.ExecuteSqlRawAsync(@$"
 IF EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'[{sqlServerStorageOptions.Schema}].[PrimitiveEvent]') AND type in (N'U'))
 BEGIN
     DELETE FROM [{sqlServerStorageOptions.Schema}].[PrimitiveEvent]
@@ -92,11 +93,8 @@ BEGIN
         et.[TypeName] LIKE 'Shuttle.Recall.Testing%'
 END
 ");
-        }
 
-        await using (var dbContext = scope.ServiceProvider.GetRequiredService<SqlServerEventProcessingDbContext>())
-        {
-            await dbContext.Database.ExecuteSqlRawAsync(@$"
+            await sqlServerEventProcessingDbContext.Database.ExecuteSqlRawAsync(@$"
 IF EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'[{sqlServerStorageOptions.Schema}].[Projection]') AND type in (N'U'))
 BEGIN
     DELETE FROM [{sqlServerStorageOptions.Schema}].[Projection] WHERE [Name] like 'recall-fixture%'

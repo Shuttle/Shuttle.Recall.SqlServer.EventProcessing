@@ -1,5 +1,4 @@
-﻿using System.Data.Common;
-using Microsoft.EntityFrameworkCore;
+﻿using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
@@ -40,10 +39,10 @@ public static class RecallBuilderExtensions
 
             services.AddDbContext<SqlServerEventProcessingDbContext>((serviceProvider, options) =>
             {
+                var sqlServerStorageDbContext = serviceProvider.GetRequiredService<SqlServerStorageDbContext>();
                 var sqlServerStorageOptions = serviceProvider.GetRequiredService<IOptions<SqlServerStorageOptions>>().Value;
-                var dbConnection = serviceProvider.GetRequiredKeyedService<DbConnection>(sqlServerStorageOptions.DbConnectionServiceKey);
 
-                options.UseSqlServer(dbConnection, sqlServerOptions =>
+                options.UseSqlServer(sqlServerStorageDbContext.Database.GetDbConnection(), sqlServerOptions =>
                 {
                     sqlServerOptions.CommandTimeout((int)sqlServerStorageOptions.CommandTimeout.TotalSeconds);
                 });
