@@ -1,4 +1,7 @@
 <Solution>
+  <Folder Name="/.package/">
+    <File Path=".package/package.msbuild" />
+  </Folder>
   <Folder Name="/Solution Items/">
     <File Path="LICENSE" />
     <File Path="README.md" />

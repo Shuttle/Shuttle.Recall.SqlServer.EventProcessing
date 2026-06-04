@@ -1,0 +1,21 @@
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003" DefaultTargets="Package" ToolsVersion="15">
+  <PropertyGroup>
+    <LinuxRuntimeIdentifier>linux-x64</LinuxRuntimeIdentifier>
+    <WindowsRuntimeIdentifier>win-x64</WindowsRuntimeIdentifier>
+    <AssemblyBaseName>Shuttle.Recall.SqlServer.EventProcessing.Database</AssemblyBaseName>
+  </PropertyGroup>
+
+  <Target Name="Package">
+    <Exec
+        Command="dotnet publish ../Shuttle.Recall.SqlServer.EventProcessing.Database/Shuttle.Recall.SqlServer.EventProcessing.Database.csproj -c Release -f net10.0 -r $(LinuxRuntimeIdentifier) --self-contained -o $(MSBuildProjectDirectory)/deployment/linux" />
+    <Move
+        SourceFiles="$(MSBuildProjectDirectory)/deployment/linux/$(AssemblyBaseName)"
+        DestinationFiles="$(MSBuildProjectDirectory)/deployment/linux/$(AssemblyBaseName)-$(LinuxRuntimeIdentifier)" />
+
+    <Exec
+        Command="dotnet publish ../Shuttle.Recall.SqlServer.EventProcessing.Database/Shuttle.Recall.SqlServer.EventProcessing.Database.csproj -c Release -f net10.0 -r $(WindowsRuntimeIdentifier) --self-contained -o $(MSBuildProjectDirectory)/deployment/windows" />
+    <Move
+        SourceFiles="$(MSBuildProjectDirectory)/deployment/windows/$(AssemblyBaseName).exe"
+        DestinationFiles="$(MSBuildProjectDirectory)/deployment/windows/$(AssemblyBaseName)-$(WindowsRuntimeIdentifier).exe" />
+  </Target>
+</Project>
