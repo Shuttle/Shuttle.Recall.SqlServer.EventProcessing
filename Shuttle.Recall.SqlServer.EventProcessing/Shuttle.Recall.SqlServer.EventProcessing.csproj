@@ -14,7 +14,7 @@
 
   <PropertyGroup>
     <Description>Sql Server event projection processing.</Description>
-    <Version>21.0.3</Version>
+    <Version>22.0.0-alpha.1</Version>
     <PackageProjectUrl></PackageProjectUrl>
     <RepositoryUrl>https://github.com/Shuttle/Shuttle.Recall.SqlServer.Storage.git</RepositoryUrl>
     <PackageTags>eventsourcing eventsource event-sourcing event-source eventstore event-store project event-processing eventprocessing</PackageTags>
