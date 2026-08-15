@@ -46,3 +46,7 @@ The default JSON settings structure is as follows:
 ## Database
 
 In order to create the relevant database structures you can use the `Shuttle.Recall.SqlServer.EventProcessing.Database` console application and provide the `connection-string` and (optional) `schema` arguments.  Alternatively, you can let the library create the structures by setting the `ConfigureDatabase` option to `true` (which is the default).
+
+## Immediate Consistency
+
+When a projection is configured for immediate consistency (see the `Shuttle.Recall` documentation's `EventProcessingOptions.ImmediateConsistency` options), this package tracks each event that a projection has already handled immediately in an `ImmediateProjectionEvent` table. This allows the eventual event processor to skip re-invoking that projection's handler for an event it has already handled immediately, while still advancing the projection's checkpoint over it.
