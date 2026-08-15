@@ -7,12 +7,13 @@ using Shuttle.Recall.SqlServer.Storage;
 
 namespace Shuttle.Recall.SqlServer.EventProcessing;
 
-public class SequentialProjectionEventService(IOptions<RecallOptions> recallOptions, ISequentialProjectionEventServiceContext sequentialProjectionEventServiceContext, SqlServerStorageDbContext sqlServerStorageDbContext, SqlServerEventProcessingDbContext sqlServerEventProcessingDbContext, IProjectionRepository projectionRepository, IProjectionQuery projectionQuery, IPrimitiveEventQuery primitiveEventQuery)
+public class SequentialProjectionEventService(IOptions<RecallOptions> recallOptions, ISequentialProjectionEventServiceContext sequentialProjectionEventServiceContext, SqlServerStorageDbContext sqlServerStorageDbContext, SqlServerEventProcessingDbContext sqlServerEventProcessingDbContext, IProjectionRepository projectionRepository, IProjectionQuery projectionQuery, IPrimitiveEventQuery primitiveEventQuery, IImmediateProjectionEventRepository immediateProjectionEventRepository)
     : IProjectionEventService
 {
     private readonly RecallOptions _recallOptions = Guard.AgainstNull(Guard.AgainstNull(recallOptions).Value);
     private readonly SqlServerStorageDbContext _sqlServerStorageDbContext = Guard.AgainstNull(sqlServerStorageDbContext);
     private readonly SqlServerEventProcessingDbContext _sqlServerEventProcessingDbContext = Guard.AgainstNull(sqlServerEventProcessingDbContext);
+    private readonly IImmediateProjectionEventRepository _immediateProjectionEventRepository = Guard.AgainstNull(immediateProjectionEventRepository);
     private readonly IPrimitiveEventQuery _primitiveEventQuery = Guard.AgainstNull(primitiveEventQuery);
     private readonly IProjectionQuery _projectionQuery = Guard.AgainstNull(projectionQuery);
     private readonly IProjectionRepository _projectionRepository = Guard.AgainstNull(projectionRepository);
@@ -27,6 +28,11 @@ public class SequentialProjectionEventService(IOptions<RecallOptions> recallOpti
 
         await _projectionRepository.CommitAsync(projectionEvent.Projection, cancellationToken);
 
+        if (projectionEvent.AlreadyHandled)
+        {
+            await _immediateProjectionEventRepository.RemoveAsync(projectionEvent.Projection.Name, projectionEvent.PrimitiveEvent.EventId, cancellationToken);
+        }
+
         if (_transaction != null)
         {
             await _transaction.CommitAsync(CancellationToken.None);
@@ -39,7 +45,7 @@ public class SequentialProjectionEventService(IOptions<RecallOptions> recallOpti
     public async Task<ProjectionEvent?> RetrieveAsync(IPipelineContext<RetrieveEvent> pipelineContext, CancellationToken cancellationToken = default)
     {
         await _recallOptions.Operation.InvokeAsync(new("[SequentialProjectionService.Retrieve/Starting]"), cancellationToken);
-        
+
         _transaction = await _sqlServerEventProcessingDbContext.Database.BeginTransactionAsync(cancellationToken);
         await _sqlServerStorageDbContext.Database.UseTransactionAsync(_transaction.GetDbTransaction(), cancellationToken);
 
@@ -56,8 +62,20 @@ public class SequentialProjectionEventService(IOptions<RecallOptions> recallOpti
         var primitiveEvent = await _sequentialProjectionEventServiceContext.RetrievePrimitiveEventAsync(_primitiveEventQuery, nextSequenceNumber, cancellationToken);
 
         await _recallOptions.Operation.InvokeAsync(new($"[SequentialProjectionService.Retrieve/Completed] : projection = '{projection.Name}' / sequence number = {primitiveEvent?.SequenceNumber.ToString() ?? "<null>"}"), cancellationToken);
-        
-        return primitiveEvent == null ? null : new(projection, primitiveEvent);
+
+        if (primitiveEvent == null)
+        {
+            return null;
+        }
+
+        var alreadyHandled = await _immediateProjectionEventRepository.ContainsAsync(projection.Name, primitiveEvent.EventId, cancellationToken);
+
+        return new(projection, primitiveEvent, alreadyHandled);
+    }
+
+    public async Task ProjectionEventHandledAsync(string projectionName, Guid eventId, CancellationToken cancellationToken = default)
+    {
+        await _immediateProjectionEventRepository.SaveAsync(projectionName, eventId, cancellationToken);
     }
 
     public async Task DeferAsync(IPipelineContext<HandleEvent> pipelineContext, CancellationToken cancellationToken = default)

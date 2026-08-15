@@ -17,6 +17,7 @@ public static class RecallBuilderExtensions
 
             services.AddScoped<IProjectionQuery, ProjectionQuery>();
             services.AddScoped<IProjectionRepository, ProjectionRepository>();
+            services.AddScoped<IImmediateProjectionEventRepository, ImmediateProjectionEventRepository>();
             services.AddScoped<IProjectionEventService, SequentialProjectionEventService>();
             services.AddSingleton<ISequentialProjectionEventServiceContext, SequentialProjectionEventServiceContext>();
 

@@ -49,6 +49,12 @@ public class EventProcessingFixture : RecallFixture
     }
 
     [Test]
+    public async Task Should_be_able_to_exercise_immediate_consistency_async()
+    {
+        await ExerciseImmediateConsistencyAsync(GetRecallFixtureOptions().WithEventProcessingHandlerTimeout(TimeSpan.FromSeconds(30)));
+    }
+
+    [Test]
     public async Task Should_be_able_to_process_events_async()
     {
         await ExerciseEventProcessingAsync(GetRecallFixtureOptions().WithEventProcessingHandlerTimeout(TimeSpan.FromSeconds(1500)));
