@@ -89,6 +89,20 @@ BEGIN
     DROP TABLE [{schema}].[ProjectionJournal];
 END
 
+IF NOT EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'[{schema}].[ImmediateProjectionEvent]') AND type in (N'U'))
+BEGIN
+    CREATE TABLE [{schema}].[ImmediateProjectionEvent]
+    (
+        [ProjectionName] [nvarchar](650) NOT NULL,
+        [EventId] [uniqueidentifier] NOT NULL,
+        [ProcessedAt] [datetimeoffset](7) NOT NULL,
+        CONSTRAINT [PK_ImmediateProjectionEvent] PRIMARY KEY CLUSTERED ([ProjectionName] ASC, [EventId] ASC)
+    ) ON [PRIMARY];
+
+    ALTER TABLE [{schema}].[ImmediateProjectionEvent]
+        ADD CONSTRAINT [DF_ImmediateProjectionEvent_ProcessedAt] DEFAULT (SYSDATETIMEOFFSET()) FOR [ProcessedAt];
+END
+
 EXEC sp_releaseapplock @Resource = '{typeof(EventProcessingHostedService).FullName}', @LockOwner = 'Session';
 ", cancellationToken);
 
