@@ -3,7 +3,6 @@ using System.Diagnostics.CodeAnalysis;
 using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
-using Microsoft.Extensions.Options;
 using Shuttle.Contract;
 using Shuttle.Recall.SqlServer.Storage;
 
@@ -17,19 +16,16 @@ public interface IImmediateProjectionEventRepository
 }
 
 [SuppressMessage("Security", "EF1002:Risk of vulnerability to SQL injection", Justification = "Schema and table names are from trusted configuration sources")]
-public class ImmediateProjectionEventRepository(IOptions<SqlServerStorageOptions> sqlServerStorageOptions, SqlServerStorageDbContext dbContext) : IImmediateProjectionEventRepository
+public class ImmediateProjectionEventRepository(ISqlServerStorageSchemaAccessor schemaAccessor, SqlServerStorageDbContext dbContext) : IImmediateProjectionEventRepository
 {
-    private readonly SqlServerStorageDbContext _dbContext = Guard.AgainstNull(dbContext);
-    private readonly SqlServerStorageOptions _sqlServerStorageOptions = Guard.AgainstNull(Guard.AgainstNull(sqlServerStorageOptions).Value);
-
     public async Task<bool> ContainsAsync(string projectionName, Guid eventId, CancellationToken cancellationToken = default)
     {
-        var connection = _dbContext.Database.GetDbConnection();
+        var connection = dbContext.Database.GetDbConnection();
 
         await using var command = connection.CreateCommand();
 
         command.CommandText = $@"
-IF EXISTS (SELECT NULL FROM [{_sqlServerStorageOptions.Schema}].[ImmediateProjectionEvent] WHERE [ProjectionName] = @ProjectionName AND [EventId] = @EventId)
+IF EXISTS (SELECT NULL FROM [{schemaAccessor.Schema}].[ImmediateProjectionEvent] WHERE [ProjectionName] = @ProjectionName AND [EventId] = @EventId)
     SELECT 1
 ELSE
     SELECT 0
@@ -38,7 +34,7 @@ ELSE
         command.Parameters.Add(new SqlParameter("@ProjectionName", Guard.AgainstEmpty(projectionName)));
         command.Parameters.Add(new SqlParameter("@EventId", eventId));
 
-        var currentTransaction = _dbContext.Database.CurrentTransaction;
+        var currentTransaction = dbContext.Database.CurrentTransaction;
 
         if (currentTransaction != null)
         {
@@ -55,10 +51,10 @@ ELSE
 
     public async Task SaveAsync(string projectionName, Guid eventId, CancellationToken cancellationToken = default)
     {
-        await _dbContext.Database.ExecuteSqlRawAsync($@"
-IF NOT EXISTS (SELECT NULL FROM [{_sqlServerStorageOptions.Schema}].[ImmediateProjectionEvent] WHERE [ProjectionName] = @ProjectionName AND [EventId] = @EventId)
+        await dbContext.Database.ExecuteSqlRawAsync($@"
+IF NOT EXISTS (SELECT NULL FROM [{schemaAccessor.Schema}].[ImmediateProjectionEvent] WHERE [ProjectionName] = @ProjectionName AND [EventId] = @EventId)
 BEGIN
-    INSERT INTO [{_sqlServerStorageOptions.Schema}].[ImmediateProjectionEvent] ([ProjectionName], [EventId])
+    INSERT INTO [{schemaAccessor.Schema}].[ImmediateProjectionEvent] ([ProjectionName], [EventId])
     VALUES (@ProjectionName, @EventId)
 END
 ",
@@ -72,8 +68,8 @@ END
 
     public async Task RemoveAsync(string projectionName, Guid eventId, CancellationToken cancellationToken = default)
     {
-        await _dbContext.Database.ExecuteSqlRawAsync($@"
-DELETE FROM [{_sqlServerStorageOptions.Schema}].[ImmediateProjectionEvent]
+        await dbContext.Database.ExecuteSqlRawAsync($@"
+DELETE FROM [{schemaAccessor.Schema}].[ImmediateProjectionEvent]
 WHERE [ProjectionName] = @ProjectionName AND [EventId] = @EventId
 ",
             [

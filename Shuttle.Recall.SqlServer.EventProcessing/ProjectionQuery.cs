@@ -2,20 +2,15 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.Extensions.Options;
-using Shuttle.Contract;
 using System.Data;
 using Shuttle.Recall.SqlServer.Storage;
 
 namespace Shuttle.Recall.SqlServer.EventProcessing;
 
-public class ProjectionQuery(IOptions<RecallOptions> recallOptions, IOptions<SqlServerStorageOptions> sqlServerStorageOptions, IOptions<SqlServerEventProcessingOptions> sqlServerEventProcessingOptions, SqlServerEventProcessingDbContext dbContext)
+public class ProjectionQuery(IOptions<RecallOptions> recallOptions, ISqlServerStorageSchemaAccessor schemaAccessor, IOptions<SqlServerEventProcessingOptions> sqlServerEventProcessingOptions, SqlServerEventProcessingDbContext dbContext)
     : IProjectionQuery
 {
     private static readonly string ResourceName = typeof(ProjectionQuery).FullName ?? nameof(ProjectionQuery);
-
-    private readonly RecallOptions _recallOptions = Guard.AgainstNull(Guard.AgainstNull(recallOptions).Value);
-    private readonly SqlServerStorageOptions _sqlServerStorageOptions = Guard.AgainstNull(Guard.AgainstNull(sqlServerStorageOptions).Value);
-    private readonly SqlServerEventProcessingDbContext _dbContext = Guard.AgainstNull(dbContext);
 
     public async ValueTask<Query.Projection> SearchAsync(Query.Projection.Specification specification, CancellationToken cancellationToken = default)
     {
@@ -24,13 +19,13 @@ public class ProjectionQuery(IOptions<RecallOptions> recallOptions, IOptions<Sql
 
     public async ValueTask<Query.Projection?> GetPendingAsync(CancellationToken cancellationToken = default)
     {
-        await _recallOptions.Operation.InvokeAsync(new("[ProjectionQuery.Get/Starting]"), cancellationToken);
+        await recallOptions.Value.Operation.InvokeAsync(new("[ProjectionQuery.Get/Starting]"), cancellationToken);
 
-        var connection = _dbContext.Database.GetDbConnection();
+        var connection = dbContext.Database.GetDbConnection();
 
         await using var command = connection.CreateCommand();
 
-        command.Transaction = _dbContext.Database.CurrentTransaction?.GetDbTransaction();
+        command.Transaction = dbContext.Database.CurrentTransaction?.GetDbTransaction();
         
         command.CommandText = $@"
 EXEC sp_getapplock @Resource = '{ResourceName}', @LockMode = 'Exclusive', @LockOwner = 'Session', @LockTimeout = 15000;
@@ -48,14 +43,14 @@ DECLARE @Now DATETIMEOFFSET = SYSDATETIMEOFFSET();
         p.[DeferredUntil],
         p.[FailureCount]
     FROM 
-        [{_sqlServerStorageOptions.Schema}].[Projection] p WITH (UPDLOCK, READPAST, ROWLOCK)
+        [{schemaAccessor.Schema}].[Projection] p WITH (UPDLOCK, READPAST, ROWLOCK)
     WHERE
-        {(_recallOptions.EventProcessing.IncludedProjections.Count > 0
-            ? $"p.[Name] IN ({string.Join(',', _recallOptions.EventProcessing.IncludedProjections.Select(item => $"'{item}'"))}) AND"
+        {(recallOptions.Value.EventProcessing.IncludedProjections.Count > 0
+            ? $"p.[Name] IN ({string.Join(',', recallOptions.Value.EventProcessing.IncludedProjections.Select(item => $"'{item}'"))}) AND"
             : string.Empty
         )}
-        {(_recallOptions.EventProcessing.ExcludedProjections.Count > 0
-            ? $"p.[Name] NOT IN ({string.Join(',', _recallOptions.EventProcessing.ExcludedProjections.Select(item => $"'{item}'"))}) AND"
+        {(recallOptions.Value.EventProcessing.ExcludedProjections.Count > 0
+            ? $"p.[Name] NOT IN ({string.Join(',', recallOptions.Value.EventProcessing.ExcludedProjections.Select(item => $"'{item}'"))}) AND"
             : string.Empty
         )}
         (
@@ -97,7 +92,7 @@ EXEC sp_releaseapplock @Resource = '{ResourceName}', @LockOwner = 'Session';
 
         if (!await reader.ReadAsync(cancellationToken))
         {
-            await _recallOptions.Operation.InvokeAsync(new("[ProjectionQuery.Get/Completed] : projection = <null>"), cancellationToken);
+            await recallOptions.Value.Operation.InvokeAsync(new("[ProjectionQuery.Get/Completed] : projection = <null>"), cancellationToken);
 
             return null;
         }
@@ -108,14 +103,14 @@ EXEC sp_releaseapplock @Resource = '{ResourceName}', @LockOwner = 'Session';
             FailureCount=reader.GetInt32(2)
         };
 
-        await _recallOptions.Operation.InvokeAsync(new($"[ProjectionQuery.Get/Completed] : projection name = '{result.Name}' / sequence number = {result.SequenceNumber}"), cancellationToken);
+        await recallOptions.Value.Operation.InvokeAsync(new($"[ProjectionQuery.Get/Completed] : projection name = '{result.Name}' / sequence number = {result.SequenceNumber}"), cancellationToken);
 
         return result;
     }
 
     public async ValueTask<bool> HasPendingProjectionsAsync(long sequenceNumber, CancellationToken cancellationToken = default)
     {
-        var connection = _dbContext.Database.GetDbConnection();
+        var connection = dbContext.Database.GetDbConnection();
 
         await using var command = connection.CreateCommand();
 
@@ -125,7 +120,7 @@ IF EXISTS
     SELECT
         NULL
     FROM
-        [{_sqlServerStorageOptions.Schema}].Projection
+        [{schemaAccessor.Schema}].Projection
     WHERE
         SequenceNumber < @SequenceNumber
 )

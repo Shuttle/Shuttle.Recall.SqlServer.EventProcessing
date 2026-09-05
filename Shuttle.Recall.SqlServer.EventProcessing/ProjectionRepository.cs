@@ -1,6 +1,5 @@
 ﻿using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Options;
 using System.Data;
 using System.Diagnostics.CodeAnalysis;
 using Shuttle.Recall.SqlServer.Storage;
@@ -8,12 +7,12 @@ using Shuttle.Recall.SqlServer.Storage;
 namespace Shuttle.Recall.SqlServer.EventProcessing;
 
 [SuppressMessage("Security", "EF1002:Risk of vulnerability to SQL injection", Justification = "Schema and table names are from trusted configuration sources")]
-public class ProjectionRepository(IOptions<SqlServerStorageOptions> sqlServerStorageOptions, SqlServerEventProcessingDbContext dbContext)
+public class ProjectionRepository(ISqlServerStorageSchemaAccessor schemaAccessor, SqlServerEventProcessingDbContext dbContext)
     : IProjectionRepository
 {
     public async Task<Projection> GetAsync(string name, CancellationToken cancellationToken = default)
     {
-        ArgumentNullException.ThrowIfNull(sqlServerStorageOptions);
+        ArgumentNullException.ThrowIfNull(schemaAccessor);
         ArgumentNullException.ThrowIfNull(dbContext);
 
         var connection = dbContext.Database.GetDbConnection();
@@ -21,9 +20,9 @@ public class ProjectionRepository(IOptions<SqlServerStorageOptions> sqlServerSto
         await using var command = connection.CreateCommand();
 
         command.CommandText = $@"
-IF NOT EXISTS (SELECT NULL FROM [{sqlServerStorageOptions.Value.Schema}].[Projection] WHERE [Name] = @Name)
+IF NOT EXISTS (SELECT NULL FROM [{schemaAccessor.Schema}].[Projection] WHERE [Name] = @Name)
 BEGIN
-    INSERT INTO [{sqlServerStorageOptions.Value.Schema}].[Projection] 
+    INSERT INTO [{schemaAccessor.Schema}].[Projection] 
     (
         [Name], 
         [SequenceNumber]
@@ -40,7 +39,7 @@ SELECT
     [SequenceNumber],
     [FailureCount]
 FROM
-    [{sqlServerStorageOptions.Value.Schema}].[Projection]
+    [{schemaAccessor.Schema}].[Projection]
 WHERE
     [Name] = @Name
 ";
@@ -64,13 +63,13 @@ WHERE
 
     public async Task SaveAsync(Projection projection, CancellationToken cancellationToken = default)
     {
-        ArgumentNullException.ThrowIfNull(sqlServerStorageOptions);
+        ArgumentNullException.ThrowIfNull(schemaAccessor);
         ArgumentNullException.ThrowIfNull(dbContext);
         ArgumentNullException.ThrowIfNull(projection);
 
         await dbContext.Database.ExecuteSqlRawAsync(@$"
 UPDATE
-    [{sqlServerStorageOptions.Value.Schema}].[Projection]
+    [{schemaAccessor.Schema}].[Projection]
 SET
     [SequenceNumber] = @SequenceNumber,
     [LockedAt] = NULL,
