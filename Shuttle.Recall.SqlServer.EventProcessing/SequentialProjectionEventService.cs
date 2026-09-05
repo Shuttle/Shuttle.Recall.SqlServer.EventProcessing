@@ -26,7 +26,7 @@ public class SequentialProjectionEventService(IOptions<RecallOptions> recallOpti
 
         await _recallOptions.Operation.InvokeAsync(new($"[SequentialProjectionService.Acknowledge/Starting] : projection = '{projectionEvent.Projection.Name}' / sequence number = {projectionEvent.PrimitiveEvent.SequenceNumber}"), cancellationToken);
 
-        await _projectionRepository.CommitAsync(projectionEvent.Projection, cancellationToken);
+        await _projectionRepository.SaveAsync(projectionEvent.Projection, cancellationToken);
 
         if (projectionEvent.AlreadyHandled)
         {
@@ -49,7 +49,7 @@ public class SequentialProjectionEventService(IOptions<RecallOptions> recallOpti
         _transaction = await _sqlServerEventProcessingDbContext.Database.BeginTransactionAsync(cancellationToken);
         await _sqlServerStorageDbContext.Database.UseTransactionAsync(_transaction.GetDbTransaction(), cancellationToken);
 
-        var projection = await _projectionQuery.GetAsync(cancellationToken);
+        var projection = await _projectionQuery.GetPendingAsync(cancellationToken);
 
         if (projection == null)
         {
@@ -70,7 +70,7 @@ public class SequentialProjectionEventService(IOptions<RecallOptions> recallOpti
 
         var alreadyHandled = await _immediateProjectionEventRepository.ContainsAsync(projection.Name, primitiveEvent.EventId, cancellationToken);
 
-        return new(projection, primitiveEvent, alreadyHandled);
+        return new(new(projection.Name, projection.SequenceNumber, projection.FailureCount), primitiveEvent, alreadyHandled);
     }
 
     public async Task ProjectionEventHandledAsync(string projectionName, Guid eventId, CancellationToken cancellationToken = default)
@@ -88,7 +88,7 @@ public class SequentialProjectionEventService(IOptions<RecallOptions> recallOpti
             return;
         }
 
-        await _projectionRepository.DeferAsync(projectionEvent.Projection, deferredUntil.Value, cancellationToken);
+        await _projectionRepository.SaveAsync(projectionEvent.Projection.Defer(deferredUntil.Value), cancellationToken);
 
         if (_transaction != null)
         {
@@ -102,6 +102,33 @@ public class SequentialProjectionEventService(IOptions<RecallOptions> recallOpti
         if (_transaction != null)
         {
             await _transaction.RollbackAsync(CancellationToken.None);
+            await _transaction.DisposeAsync();
+            _transaction = null;
         }
+
+        var projectionEvent = Guard.AgainstNull(pipelineContext).Pipeline.State.TryGetProjectionEvent();
+
+        if (projectionEvent == null)
+        {
+            return;
+        }
+
+        projectionEvent.Projection.Failed();
+
+        var delay = GetFailureDuration(_recallOptions.EventProcessing.ProjectionProcessorFailureDurations, projectionEvent.Projection.FailureCount);
+
+        await _projectionRepository.SaveAsync(projectionEvent.Projection.Defer(DateTimeOffset.UtcNow.Add(delay)), CancellationToken.None);
+    }
+
+    private static TimeSpan GetFailureDuration(IReadOnlyList<TimeSpan> durations, int failureCount)
+    {
+        if (durations.Count == 0)
+        {
+            return TimeSpan.FromSeconds(15);
+        }
+
+        var index = Math.Min(failureCount - 1, durations.Count - 1);
+
+        return durations[Math.Max(index, 0)];
     }
 }

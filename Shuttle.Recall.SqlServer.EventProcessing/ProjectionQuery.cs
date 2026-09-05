@@ -17,7 +17,12 @@ public class ProjectionQuery(IOptions<RecallOptions> recallOptions, IOptions<Sql
     private readonly SqlServerStorageOptions _sqlServerStorageOptions = Guard.AgainstNull(Guard.AgainstNull(sqlServerStorageOptions).Value);
     private readonly SqlServerEventProcessingDbContext _dbContext = Guard.AgainstNull(dbContext);
 
-    public async ValueTask<Projection?> GetAsync(CancellationToken cancellationToken = default)
+    public async ValueTask<Query.Projection> SearchAsync(Query.Projection.Specification specification, CancellationToken cancellationToken = default)
+    {
+        throw new NotImplementedException();
+    }
+
+    public async ValueTask<Query.Projection?> GetPendingAsync(CancellationToken cancellationToken = default)
     {
         await _recallOptions.Operation.InvokeAsync(new("[ProjectionQuery.Get/Starting]"), cancellationToken);
 
@@ -40,7 +45,8 @@ DECLARE @Now DATETIMEOFFSET = SYSDATETIMEOFFSET();
         p.[SequenceNumber],
         p.[Name],
         p.[LockedAt],
-        p.[DeferredUntil]
+        p.[DeferredUntil],
+        p.[FailureCount]
     FROM 
         [{_sqlServerStorageOptions.Schema}].[Projection] p WITH (UPDLOCK, READPAST, ROWLOCK)
     WHERE
@@ -67,14 +73,15 @@ DECLARE @Now DATETIMEOFFSET = SYSDATETIMEOFFSET();
         p.[SequenceNumber],
         p.[Name]
 )
-UPDATE 
+UPDATE
     cte
-SET 
+SET
     [LockedAt] = @Now,
     [DeferredUntil] = NULL
 OUTPUT
     inserted.[Name],
-    inserted.[SequenceNumber];
+    inserted.[SequenceNumber],
+    inserted.[FailureCount];
 
 EXEC sp_releaseapplock @Resource = '{ResourceName}', @LockOwner = 'Session';
 ";
@@ -95,7 +102,11 @@ EXEC sp_releaseapplock @Resource = '{ResourceName}', @LockOwner = 'Session';
             return null;
         }
 
-        var result = new Projection(reader.GetString(0), reader.GetInt64(1));
+        var result = new Query.Projection{
+            Name=reader.GetString(0),
+            SequenceNumber=reader.GetInt64(1),
+            FailureCount=reader.GetInt32(2)
+        };
 
         await _recallOptions.Operation.InvokeAsync(new($"[ProjectionQuery.Get/Completed] : projection name = '{result.Name}' / sequence number = {result.SequenceNumber}"), cancellationToken);
 

@@ -10,12 +10,12 @@
         Command="dotnet publish ../Shuttle.Recall.SqlServer.EventProcessing.Database/Shuttle.Recall.SqlServer.EventProcessing.Database.csproj -c Release -f net10.0 -r $(LinuxRuntimeIdentifier) --self-contained -o $(MSBuildProjectDirectory)/deployment/linux" />
     <Move
         SourceFiles="$(MSBuildProjectDirectory)/deployment/linux/$(AssemblyBaseName)"
-        DestinationFiles="$(MSBuildProjectDirectory)/deployment/linux/$(AssemblyBaseName)-$(LinuxRuntimeIdentifier)" />
+        DestinationFiles="$(MSBuildProjectDirectory)/deployment/$(AssemblyBaseName)-$(LinuxRuntimeIdentifier)" />
 
     <Exec
         Command="dotnet publish ../Shuttle.Recall.SqlServer.EventProcessing.Database/Shuttle.Recall.SqlServer.EventProcessing.Database.csproj -c Release -f net10.0 -r $(WindowsRuntimeIdentifier) --self-contained -o $(MSBuildProjectDirectory)/deployment/windows" />
     <Move
         SourceFiles="$(MSBuildProjectDirectory)/deployment/windows/$(AssemblyBaseName).exe"
-        DestinationFiles="$(MSBuildProjectDirectory)/deployment/windows/$(AssemblyBaseName)-$(WindowsRuntimeIdentifier).exe" />
+        DestinationFiles="$(MSBuildProjectDirectory)/deployment/$(AssemblyBaseName)-$(WindowsRuntimeIdentifier).exe" />
   </Target>
 </Project>

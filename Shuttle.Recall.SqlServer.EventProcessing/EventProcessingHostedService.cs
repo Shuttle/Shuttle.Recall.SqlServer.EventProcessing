@@ -74,6 +74,12 @@ BEGIN
     ADD [DeferredUntil] DATETIMEOFFSET(7) NULL;
 END
 
+IF COL_LENGTH('[{schema}].[Projection]', 'FailureCount') IS NULL
+BEGIN
+    ALTER TABLE [{schema}].[Projection]
+    ADD [FailureCount] INT NOT NULL CONSTRAINT [DF_Projection_FailureCount] DEFAULT (0);
+END
+
 IF NOT EXISTS (SELECT * FROM sys.indexes WHERE name = N'IX_Projection_SequenceNumber_Name' AND object_id = OBJECT_ID(N'[{schema}].[Projection]'))
 BEGIN
     CREATE NONCLUSTERED INDEX [IX_Projection_SequenceNumber_Name] 

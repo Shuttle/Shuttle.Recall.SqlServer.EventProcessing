@@ -22,7 +22,7 @@ public class SequentialProjectionEventServiceContext(IOptions<RecallOptions> rec
 
             using (new TransactionScope(TransactionScopeOption.Suppress, TransactionScopeAsyncFlowOption.Enabled))
             {
-                var specification = new PrimitiveEvent.Specification()
+                var specification = new Query.PrimitiveEvent.Specification()
                     .WithMaximumRows(_sqlServerEventProcessingOptions.ProjectionPrefetchCount)
                     .WithSequenceNumberStart(sequenceNumber);
 
@@ -32,14 +32,14 @@ public class SequentialProjectionEventServiceContext(IOptions<RecallOptions> rec
 
                 foreach (var primitiveEvent in primitiveEvents)
                 {
-                    _cache.Add(primitiveEvent.SequenceNumber!.Value, primitiveEvent);
+                    _cache.Add(primitiveEvent.SequenceNumber!.Value, primitiveEvent.ToActual());
                 }
 
                 await _recallOptions.Operation.InvokeAsync(new($"[SequentialProjectionEventServiceContext.Retrieve/Search] : sequence number = {sequenceNumber} / primitive event count = {primitiveEvents.Count} / cache size = {_cache.Count}"), cancellationToken);
 
                 // This would handle gaps (SequenceNumber >= sequenceNumber) although that really should not happen.
                 // Adding for legacy, but clearing projections and re-sequencing would be the preferred approach.
-                cachedPrimitiveEvent = primitiveEvents.FirstOrDefault(e => e.SequenceNumber >= sequenceNumber);
+                cachedPrimitiveEvent = primitiveEvents.FirstOrDefault(e => e.SequenceNumber >= sequenceNumber)?.ToActual();
             }
         }
 

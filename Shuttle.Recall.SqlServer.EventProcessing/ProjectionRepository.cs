@@ -35,12 +35,13 @@ BEGIN
     )
 END
 
-SELECT 
-    [Name], 
-    [SequenceNumber]
-FROM 
-    [{sqlServerStorageOptions.Value.Schema}].[Projection] 
-WHERE 
+SELECT
+    [Name],
+    [SequenceNumber],
+    [FailureCount]
+FROM
+    [{sqlServerStorageOptions.Value.Schema}].[Projection]
+WHERE
     [Name] = @Name
 ";
 
@@ -58,10 +59,10 @@ WHERE
             throw new ApplicationException(string.Format(Resources.ProjectionException));
         }
 
-        return new(reader.GetString(0), reader.GetInt64(1));
+        return new(reader.GetString(0), reader.GetInt64(1), reader.GetInt32(2));
     }
 
-    public async Task CommitAsync(Projection projection, CancellationToken cancellationToken = default)
+    public async Task SaveAsync(Projection projection, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(sqlServerStorageOptions);
         ArgumentNullException.ThrowIfNull(dbContext);
@@ -72,35 +73,17 @@ UPDATE
     [{sqlServerStorageOptions.Value.Schema}].[Projection]
 SET
     [SequenceNumber] = @SequenceNumber,
-    [LockedAt] = NULL
-WHERE
-    Name = @Name
-",
-            [
-                new SqlParameter("@Name", projection.Name),
-                new SqlParameter("@SequenceNumber", projection.SequenceNumber)
-            ],
-            cancellationToken);
-    }
-
-    public async Task DeferAsync(Projection projection, DateTimeOffset deferredUntil, CancellationToken cancellationToken = default)
-    {
-        ArgumentNullException.ThrowIfNull(sqlServerStorageOptions);
-        ArgumentNullException.ThrowIfNull(dbContext);
-        ArgumentNullException.ThrowIfNull(projection);
-
-        await dbContext.Database.ExecuteSqlRawAsync(@$"
-UPDATE
-    [{sqlServerStorageOptions.Value.Schema}].[Projection]
-SET
     [LockedAt] = NULL,
-    [DeferredUntil] = @DeferredUntil
+    [DeferredUntil] = @DeferredUntil,
+    [FailureCount] = @FailureCount
 WHERE
     Name = @Name
 ",
             [
                 new SqlParameter("@Name", projection.Name),
-                new SqlParameter("@DeferredUntil", deferredUntil)
+                new SqlParameter("@SequenceNumber", projection.SequenceNumber),
+                new SqlParameter("@DeferredUntil", (object?)projection.DeferredUntil ?? DBNull.Value),
+                new SqlParameter("@FailureCount", projection.FailureCount)
             ],
             cancellationToken);
     }

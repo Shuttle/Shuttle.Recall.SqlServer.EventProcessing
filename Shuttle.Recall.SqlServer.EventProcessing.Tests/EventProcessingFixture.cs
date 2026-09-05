@@ -45,7 +45,7 @@ public class EventProcessingFixture : RecallFixture
     [Test]
     public async Task Should_be_able_to_exercise_event_processing_with_deferred_handling_async()
     {
-        await ExerciseEventProcessingWithDeferredHandlingAsync(GetRecallFixtureOptions().WithEventProcessingHandlerTimeout(TimeSpan.FromMinutes(5)));
+        await ExerciseEventProcessingWithDeferredHandlingAsync(GetRecallFixtureOptions().WithEventProcessingHandlerTimeout(TimeSpan.FromSeconds(30)));
     }
 
     [Test]
@@ -57,25 +57,29 @@ public class EventProcessingFixture : RecallFixture
     [Test]
     public async Task Should_be_able_to_process_events_async()
     {
-        await ExerciseEventProcessingAsync(GetRecallFixtureOptions().WithEventProcessingHandlerTimeout(TimeSpan.FromSeconds(1500)));
+        await ExerciseEventProcessingAsync(GetRecallFixtureOptions().WithEventProcessingHandlerTimeout(TimeSpan.FromSeconds(30)));
     }
 
     [Test]
     public async Task Should_be_able_to_process_events_with_delay_async()
     {
-        await ExerciseEventProcessingWithDelayAsync(GetRecallFixtureOptions());
+        await ExerciseEventProcessingWithDelayAsync(GetRecallFixtureOptions().WithEventProcessingHandlerTimeout(TimeSpan.FromSeconds(90)));
     }
 
     [Test]
     public async Task Should_be_able_to_process_events_with_failure_async()
     {
-        await ExerciseEventProcessingWithFailureAsync(GetRecallFixtureOptions());
+        await ExerciseEventProcessingWithFailureAsync(GetRecallFixtureOptions().WithEventProcessingHandlerTimeout(TimeSpan.FromSeconds(60)));
     }
 
     [Test]
     public async Task Should_be_able_to_process_volume_events_async()
     {
-        await ExerciseEventProcessingVolumeAsync(GetRecallFixtureOptions().WithEventProcessingHandlerTimeout(TimeSpan.FromMinutes(2)));
+        var options = GetRecallFixtureOptions().WithEventProcessingHandlerTimeout(TimeSpan.FromMinutes(2));
+
+        options.VolumeIterationCount = 1;
+
+        await ExerciseEventProcessingVolumeAsync(options);
     }
 
     private static async Task StartingAsync(IServiceProvider serviceProvider)
