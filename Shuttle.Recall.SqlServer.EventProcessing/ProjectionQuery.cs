@@ -14,7 +14,73 @@ public class ProjectionQuery(IOptions<RecallOptions> recallOptions, ISqlServerSt
 
     public async ValueTask<Query.Projection> SearchAsync(Query.Projection.Specification specification, CancellationToken cancellationToken = default)
     {
-        throw new NotImplementedException();
+        ArgumentNullException.ThrowIfNull(specification);
+
+        var connection = dbContext.Database.GetDbConnection();
+
+        await using var command = connection.CreateCommand();
+
+        command.Transaction = dbContext.Database.CurrentTransaction?.GetDbTransaction();
+
+        command.CommandText = $@"
+SELECT TOP (1)
+    [Name],
+    [SequenceNumber],
+    [FailureCount],
+    [DeferredUntil]
+FROM
+    [{schemaAccessor.Schema}].[Projection]
+WHERE
+    [Name] LIKE '%' + @NameMatch + '%'
+AND
+(
+    @FailureCountStart IS NULL
+    OR
+    [FailureCount] >= @FailureCountStart
+)
+AND
+(
+    @SequenceNumberStart IS NULL
+    OR
+    [SequenceNumber] >= @SequenceNumberStart
+)
+AND
+(
+    @Deferred IS NULL
+    OR
+    (@Deferred = 1 AND [DeferredUntil] IS NOT NULL)
+    OR
+    (@Deferred = 0 AND [DeferredUntil] IS NULL)
+)
+ORDER BY
+    [SequenceNumber],
+    [Name]
+";
+
+        command.Parameters.Add(new SqlParameter("@NameMatch", specification.NameMatch));
+        command.Parameters.Add(new SqlParameter("@FailureCountStart", (object?)specification.FailureCountStart ?? DBNull.Value));
+        command.Parameters.Add(new SqlParameter("@SequenceNumberStart", (object?)specification.SequenceNumberStart ?? DBNull.Value));
+        command.Parameters.Add(new SqlParameter("@Deferred", (object?)specification.Deferred ?? DBNull.Value));
+
+        if (connection.State != ConnectionState.Open)
+        {
+            await connection.OpenAsync(cancellationToken);
+        }
+
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+
+        if (!await reader.ReadAsync(cancellationToken))
+        {
+            throw new ApplicationException(Resources.ProjectionSearchException);
+        }
+
+        return new()
+        {
+            Name = reader.GetString(0),
+            SequenceNumber = reader.GetInt64(1),
+            FailureCount = reader.GetInt32(2),
+            DeferredUntil = reader.IsDBNull(3) ? null : reader.GetFieldValue<DateTimeOffset>(3)
+        };
     }
 
     public async ValueTask<Query.Projection?> GetPendingAsync(CancellationToken cancellationToken = default)

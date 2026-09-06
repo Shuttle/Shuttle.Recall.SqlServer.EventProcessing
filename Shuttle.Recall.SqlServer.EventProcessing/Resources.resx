@@ -130,6 +130,9 @@
     <value>Could not get projection with name '{0}'.</value>
     <comment>0 = projection name</comment>
   </data>
+  <data name="ProjectionSearchException" xml:space="preserve">
+    <value>Could not find a projection matching the specified criteria.</value>
+  </data>
   <data name="ProjectionServiceTypeException" xml:space="preserve">
     <value>The projection event service must be of type '{0}'; instead found type '{1}'.</value>
     <comment>0 = required type name, 1 = registered type name</comment>

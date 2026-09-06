@@ -97,6 +97,15 @@ namespace Shuttle.Recall.SqlServer.EventProcessing {
         }
         
         /// <summary>
+        ///   Looks up a localized string similar to Could not find a projection matching the specified criteria..
+        /// </summary>
+        public static string ProjectionSearchException {
+            get {
+                return ResourceManager.GetString("ProjectionSearchException", resourceCulture);
+            }
+        }
+
+        /// <summary>
         ///   Looks up a localized string similar to The projection event service must be of type &apos;{0}&apos;; instead found type &apos;{1}&apos;..
         /// </summary>
         public static string ProjectionServiceTypeException {
