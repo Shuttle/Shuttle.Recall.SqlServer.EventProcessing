@@ -15,7 +15,9 @@ public static class RecallBuilderExtensions
         {
             var services = recallBuilder.Services;
 
-            services.AddScoped<IProjectionQuery, ProjectionQuery>();
+            services.AddScoped<ProjectionQuery>();
+            services.AddScoped<IProjectionQuery>(sp => sp.GetRequiredService<ProjectionQuery>());
+            services.AddScoped<IProjectionEligibilityQuery>(sp => sp.GetRequiredService<ProjectionQuery>());
             services.AddScoped<IProjectionRepository, ProjectionRepository>();
             services.AddScoped<IImmediateProjectionEventRepository, ImmediateProjectionEventRepository>();
             services.AddScoped<IProjectionEventService, SequentialProjectionEventService>();

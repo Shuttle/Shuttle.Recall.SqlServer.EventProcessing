@@ -8,7 +8,7 @@ using Shuttle.Recall.SqlServer.Storage;
 namespace Shuttle.Recall.SqlServer.EventProcessing;
 
 public class ProjectionQuery(IOptions<RecallOptions> recallOptions, ISqlServerStorageSchemaAccessor schemaAccessor, IOptions<SqlServerEventProcessingOptions> sqlServerEventProcessingOptions, SqlServerEventProcessingDbContext dbContext)
-    : IProjectionQuery
+    : IProjectionQuery, IProjectionEligibilityQuery
 {
     private static readonly string ResourceName = typeof(ProjectionQuery).FullName ?? nameof(ProjectionQuery);
 
@@ -172,6 +172,58 @@ EXEC sp_releaseapplock @Resource = '{ResourceName}', @LockOwner = 'Session';
         await recallOptions.Value.Operation.InvokeAsync(new($"[ProjectionQuery.Get/Completed] : projection name = '{result.Name}' / sequence number = {result.SequenceNumber}"), cancellationToken);
 
         return result;
+    }
+
+    public async ValueTask<bool> HasEligibleProjectionAsync(CancellationToken cancellationToken = default)
+    {
+        var connection = dbContext.Database.GetDbConnection();
+
+        await using var command = connection.CreateCommand();
+
+        command.Transaction = dbContext.Database.CurrentTransaction?.GetDbTransaction();
+
+        command.CommandText = $@"
+IF EXISTS
+(
+    SELECT
+        NULL
+    FROM
+        [{schemaAccessor.Schema}].[Projection] p
+    WHERE
+        {(recallOptions.Value.EventProcessing.IncludedProjections.Count > 0
+            ? $"p.[Name] IN ({string.Join(',', recallOptions.Value.EventProcessing.IncludedProjections.Select(item => $"'{item}'"))}) AND"
+            : string.Empty
+        )}
+        {(recallOptions.Value.EventProcessing.ExcludedProjections.Count > 0
+            ? $"p.[Name] NOT IN ({string.Join(',', recallOptions.Value.EventProcessing.ExcludedProjections.Select(item => $"'{item}'"))}) AND"
+            : string.Empty
+        )}
+        (
+            p.[LockedAt] IS NULL
+            OR
+            p.[LockedAt] < @LockedAtTimeout
+        )
+        AND
+        (
+            p.[DeferredUntil] IS NULL
+            OR
+            p.[DeferredUntil] < @Now
+        )
+)
+    SELECT 1
+ELSE
+    SELECT 0
+";
+
+        command.Parameters.Add(new SqlParameter("@LockedAtTimeout", DateTimeOffset.UtcNow.Subtract(sqlServerEventProcessingOptions.Value.ProjectionLockTimeout)));
+        command.Parameters.Add(new SqlParameter("@Now", DateTimeOffset.UtcNow));
+
+        if (connection.State != ConnectionState.Open)
+        {
+            await connection.OpenAsync(cancellationToken);
+        }
+
+        return (int)(await command.ExecuteScalarAsync(cancellationToken) ?? 0) == 1;
     }
 
     public async ValueTask<bool> HasPendingProjectionsAsync(long sequenceNumber, CancellationToken cancellationToken = default)

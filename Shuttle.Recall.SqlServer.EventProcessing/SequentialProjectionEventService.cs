@@ -7,7 +7,7 @@ using Shuttle.Recall.SqlServer.Storage;
 
 namespace Shuttle.Recall.SqlServer.EventProcessing;
 
-public class SequentialProjectionEventService(IOptions<RecallOptions> recallOptions, ISequentialProjectionEventServiceContext sequentialProjectionEventServiceContext, SqlServerStorageDbContext sqlServerStorageDbContext, SqlServerEventProcessingDbContext sqlServerEventProcessingDbContext, IProjectionRepository projectionRepository, IProjectionQuery projectionQuery, IPrimitiveEventQuery primitiveEventQuery, IImmediateProjectionEventRepository immediateProjectionEventRepository)
+public class SequentialProjectionEventService(IOptions<RecallOptions> recallOptions, ISequentialProjectionEventServiceContext sequentialProjectionEventServiceContext, SqlServerStorageDbContext sqlServerStorageDbContext, SqlServerEventProcessingDbContext sqlServerEventProcessingDbContext, IProjectionRepository projectionRepository, IProjectionQuery projectionQuery, IProjectionEligibilityQuery projectionEligibilityQuery, IPrimitiveEventQuery primitiveEventQuery, IImmediateProjectionEventRepository immediateProjectionEventRepository)
     : IProjectionEventService
 {
     private readonly RecallOptions _recallOptions = Guard.AgainstNull(Guard.AgainstNull(recallOptions).Value);
@@ -16,6 +16,7 @@ public class SequentialProjectionEventService(IOptions<RecallOptions> recallOpti
     private readonly IImmediateProjectionEventRepository _immediateProjectionEventRepository = Guard.AgainstNull(immediateProjectionEventRepository);
     private readonly IPrimitiveEventQuery _primitiveEventQuery = Guard.AgainstNull(primitiveEventQuery);
     private readonly IProjectionQuery _projectionQuery = Guard.AgainstNull(projectionQuery);
+    private readonly IProjectionEligibilityQuery _projectionEligibilityQuery = Guard.AgainstNull(projectionEligibilityQuery);
     private readonly IProjectionRepository _projectionRepository = Guard.AgainstNull(projectionRepository);
     private readonly ISequentialProjectionEventServiceContext _sequentialProjectionEventServiceContext = Guard.AgainstNull(sequentialProjectionEventServiceContext);
     private IDbContextTransaction? _transaction;
@@ -46,6 +47,14 @@ public class SequentialProjectionEventService(IOptions<RecallOptions> recallOpti
     {
         await _recallOptions.Operation.InvokeAsync(new("[SequentialProjectionService.Retrieve/Starting]"), cancellationToken);
 
+        // Cheap, non-transactional pre-check: on an idle pass (the common case) this avoids opening a transaction
+        // and running the locking claim query in `GetPendingAsync` on every single poll.
+        if (!await _projectionEligibilityQuery.HasEligibleProjectionAsync(cancellationToken))
+        {
+            await _recallOptions.Operation.InvokeAsync(new("[SequentialProjectionService.Retrieve/Completed] : projection = <null>"), cancellationToken);
+            return null;
+        }
+
         _transaction = await _sqlServerEventProcessingDbContext.Database.BeginTransactionAsync(cancellationToken);
         await _sqlServerStorageDbContext.Database.UseTransactionAsync(_transaction.GetDbTransaction(), cancellationToken);
 
@@ -53,7 +62,11 @@ public class SequentialProjectionEventService(IOptions<RecallOptions> recallOpti
 
         if (projection == null)
         {
+            // Lost the race for the eligible projection found above (another thread/process claimed it between
+            // the pre-check and this attempt) — nothing was written, but close the transaction deterministically
+            // rather than leaving it for the DbContext's disposal to abandon implicitly.
             await _recallOptions.Operation.InvokeAsync(new("[SequentialProjectionService.Retrieve/Completed] : projection = <null>"), cancellationToken);
+            await RollbackTransactionAsync(cancellationToken);
             return null;
         }
 
@@ -65,12 +78,29 @@ public class SequentialProjectionEventService(IOptions<RecallOptions> recallOpti
 
         if (primitiveEvent == null)
         {
+            // The projection was claimed (its `LockedAt` was set) but there is no next event for it yet — roll
+            // that claim back immediately instead of leaving it to the DbContext's disposal, so other threads
+            // stop skipping past this row (via `READPAST`) sooner rather than waiting out `ProjectionLockTimeout`.
+            await RollbackTransactionAsync(cancellationToken);
             return null;
         }
 
         var alreadyHandled = await _immediateProjectionEventRepository.ContainsAsync(projection.Name, primitiveEvent.EventId, cancellationToken);
 
         return new(new(projection.Name, projection.SequenceNumber, projection.FailureCount), primitiveEvent, alreadyHandled);
+    }
+
+    private async Task RollbackTransactionAsync(CancellationToken cancellationToken)
+    {
+        if (_transaction == null)
+        {
+            return;
+        }
+
+        await _transaction.RollbackAsync(cancellationToken);
+        await _transaction.DisposeAsync();
+
+        _transaction = null;
     }
 
     public async Task ProjectionEventHandledAsync(string projectionName, Guid eventId, CancellationToken cancellationToken = default)
@@ -99,12 +129,7 @@ public class SequentialProjectionEventService(IOptions<RecallOptions> recallOpti
 
     public async Task PipelineFailedAsync(IPipelineContext<PipelineFailed> pipelineContext, CancellationToken cancellationToken = default)
     {
-        if (_transaction != null)
-        {
-            await _transaction.RollbackAsync(CancellationToken.None);
-            await _transaction.DisposeAsync();
-            _transaction = null;
-        }
+        await RollbackTransactionAsync(CancellationToken.None);
 
         var projectionEvent = Guard.AgainstNull(pipelineContext).Pipeline.State.TryGetProjectionEvent();
 
