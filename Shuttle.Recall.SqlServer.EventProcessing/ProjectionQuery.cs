@@ -99,6 +99,7 @@ EXEC sp_getapplock @Resource = '{ResourceName}', @LockMode = 'Exclusive', @LockO
 DECLARE @SequenceNumber BIGINT;
 DECLARE @Name VARCHAR(650);
 DECLARE @Now DATETIMEOFFSET = SYSDATETIMEOFFSET();
+DECLARE @MaximumSequenceNumber BIGINT = ISNULL((SELECT MAX(pe.[SequenceNumber]) FROM [{schemaAccessor.Schema}].[PrimitiveEvent] pe), 0);
 
 ;WITH cte AS
 (
@@ -130,7 +131,15 @@ DECLARE @Now DATETIMEOFFSET = SYSDATETIMEOFFSET();
             OR
             p.[DeferredUntil] < @Now
         )
+        AND
+        -- a projection that has caught up has nothing to process; claiming it would only take a turn from one that has
+        p.[SequenceNumber] < @MaximumSequenceNumber
     ORDER BY
+        -- A non-null (elapsed) `DeferredUntil` only remains on a projection that last deferred or failed, since
+        -- claiming clears it and committing saves it as null.  Projections that are progressing are claimed first;
+        -- otherwise the lowest projection, repeatedly deferring while it waits on a projection that is further
+        -- behind, would be re-claimed on every pass and starve that projection (a livelock).
+        CASE WHEN p.[DeferredUntil] IS NULL THEN 0 ELSE 1 END,
         p.[SequenceNumber],
         p.[Name]
 )
@@ -209,6 +218,8 @@ IF EXISTS
             OR
             p.[DeferredUntil] < @Now
         )
+        AND
+        p.[SequenceNumber] < ISNULL((SELECT MAX(pe.[SequenceNumber]) FROM [{schemaAccessor.Schema}].[PrimitiveEvent] pe), 0)
 )
     SELECT 1
 ELSE
